@@ -1,0 +1,15 @@
+{
+  "name": "hashnet",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://git.finwo.net/hashnet-js"
+  },
+  "author": "Robin Bron <finwo@pm.me>",
+  "license": "MIT"
+}

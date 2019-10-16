@@ -12,5 +12,7 @@
   },
   "author": "Robin Bron <finwo@pm.me>",
   "license": "MIT",
-  "dependencies": {}
+  "dependencies": {
+    "ed25519-supercop": "^1.2.0"
+  }
 }

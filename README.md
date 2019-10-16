@@ -38,3 +38,7 @@ Planned overlays:
   - could be used as dynamic dns (will need signatures)
   - signed/owned entries?
   - entries in ID expire every N minutes/seconds
+
+## Network Packet
+
+

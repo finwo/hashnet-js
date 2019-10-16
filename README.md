@@ -7,9 +7,10 @@ TODO:
 - define wire spec on websocket
 
 Network structure:
-- 512-bit IDs (random generated)
+- node IDs are public keys (pubkey for random generated key)
   - Collision detection?
   - Persistent?
+- All messages are signed and need nonce
 - Distance between 2 nodes = amount of non-equal bits between IDs
 - Peer discovery (TODO)
   - Always keep looking

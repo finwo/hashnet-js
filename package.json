@@ -8,11 +8,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "http://git.finwo.net/hashnet-js"
+    "url": "git://github.com/finwo/hashnet-js"
   },
   "author": "Robin Bron <finwo@pm.me>",
   "license": "MIT",
-  "dependencies": {
-    "simple-peer": "^9.3.0"
-  }
+  "dependencies": {}
 }

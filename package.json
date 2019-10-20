@@ -13,6 +13,7 @@
   "author": "Robin Bron <finwo@pm.me>",
   "license": "MIT",
   "dependencies": {
-    "ed25519-supercop": "^1.2.0"
+    "base64url": "^3.0.1",
+    "big-integer": "^1.6.47"
   }
 }

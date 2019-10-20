@@ -1,5 +1,50 @@
 # hashnet
 
+diffie-hellman-merkle key exchange based
+
+// A builds secret key
+a  = rand();
+ap = randPrime();
+ag = primitive root modulo p
+
+// B build secret key
+b  = rand();
+bp = randPrime();
+bg = primitive root modulo p
+
+// A & B build public keys
+aA = ag^a % ap
+bB = bg^b % bp
+pubA = ap,ag,aA
+pubB = bp,bg,bB
+
+A sends msg to B:
+
+generate A to be received by B
+- bA = bg^a % bp
+- S  = bB^a % bp
+
+pubB,pubA,bA,enc(S,m)
+
+B sends msg to A:
+
+generate B to be received by A
+- aB = ab^b % ap
+- S  = aA^b % bp
+
+pubA,pubB,aB,enc(S,m)
+
+receiver can only decrypt if receiver is honest
+full-comms are only possible if both parties are honest
+
+mitm resistance:
+neither a nor b is published, S can't be generated without them
+only pubB receiver can receive the true message
+like udp, sender can be faked
+some connection needs to be set up before accepting secrets or large packets (like the udp torrent tracker protocol)
+
+-----------
+
 TODO:
 - proper protocol name
 - define wire spec on tcp

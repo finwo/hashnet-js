@@ -13,6 +13,7 @@
   "author": "Robin Bron <finwo@pm.me>",
   "license": "MIT",
   "dependencies": {
+    "aes-js": "^3.1.2",
     "base64url": "^3.0.1",
     "big-integer": "^1.6.47",
     "is-buffer": "^2.0.4",

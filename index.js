@@ -1,4 +1,4 @@
-const b64     = require('base64url');
+const aes     = require('aes-js');
 const BigInt  = require('big-integer');
 const KeyPair = require('./keypair');
 
@@ -10,17 +10,19 @@ function Hashnet(opt) {
   }, opt);
 
   this.kp = new KeyPair();
-
-
-  // this.p  = 
-  // this.sk = Buffer.from(Array(32).fill(0).map(Math.floor(Math.random()*256)));
-  // this.pk = 
-
-  // // Deterministic network address
-  // this.na = Buffer.from(this.kp.getPublic().encode());
-
-
+  this.id = this.kp.getPublic();
 }
+
+Hashnet.prototype.send = function(destination, message) {
+  let receiverKey = new KeyPair({ public: destination })
+  let senderKey   = new KeyPair({ n: receiverKey.n, s: this.kp.s });
+  let secret      = senderKey.sharedSecret(receiverKey);
+  let m           = [...Buffer.from(this.kp.getPublic(), 'hex')];
+
+  // TODO: normalize message
+  // TODO: m = m.concat(message)
+  // TODO: aes(m)
+};
 
 
 // Hashnet.prototype.send = function( receiver, message ) {

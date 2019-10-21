@@ -122,9 +122,9 @@ function KeyPair(opts) {
   // Build from already-known public
   if (opts.public && (!opts.private)) {
     const chars = this.bits / 4;
-    this.n = opts.public.substr(0,chars);
+    this.n = BigInt(opts.public.substr(0,chars), 16);
     this.g = buildGenerator(this.n, BigInt(2).pow(24));
-    this.p = opts.public.substr(chars);
+    this.p = BigInt(opts.public.substr(chars), 16);
   }
 
   // Build modulo
@@ -141,13 +141,11 @@ function KeyPair(opts) {
 
   // Build group
   if(!this.g) {
-    console.log(this.n);
     if (opts.g) {
       this.g = opts.g;
     } else {
       this.g = buildGenerator(this.n, BigInt(2).pow(24));
     }
-    console.log(this.g);
   }
 
   // Generate public/secret

@@ -24,7 +24,7 @@ generate A to be received by B
 - bA = bg^a % bp
 - S  = bB^a % bp
 
-pubB,pubA,bA,enc(S,m)
+pubB,bA,enc(S,pubA||m)
 
 B sends msg to A:
 
@@ -32,7 +32,7 @@ generate B to be received by A
 - aB = ab^b % ap
 - S  = aA^b % bp
 
-pubA,pubB,aB,enc(S,m)
+pubA,aB,enc(S,pubB||m)
 
 receiver can only decrypt if receiver is honest
 full-comms are only possible if both parties are honest
@@ -40,8 +40,7 @@ full-comms are only possible if both parties are honest
 mitm resistance:
 neither a nor b is published, S can't be generated without them
 only pubB receiver can receive the true message
-like udp, sender can be faked
-some connection needs to be set up before accepting secrets or large packets (like the udp torrent tracker protocol)
+like udp, sender can be faked, but this results in a new encryption key in our protocol
 
 -----------
 

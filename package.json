@@ -1,22 +1,27 @@
 {
   "name": "hashnet",
   "version": "0.0.1",
-  "description": "",
-  "main": "index.js",
+  "description": "diffie-hellman-merkle key exchange based",
+  "main": "src/index.js",
+  "homepage": "https://github.com/finwo/hashnet-js#readme",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "scripts/test.sh",
+    "postpublish": "PACKAGE_VERSION=$(cat package.json | grep \\\"version\\\" | head -1 | awk -F: '{print $2}' | sed 's/[\",]//g' | tr -d '[[:space:]]') && npm deprecate \"hashnet@<${PACKAGE_VERSION}\" \"Rolling release, please update to ${PACKAGE_VERSION}\""
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/finwo/hashnet-js"
+    "url": "git+https://github.com/finwo/hashnet-js.git"
   },
   "author": "Robin Bron <finwo@pm.me>",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/finwo/hashnet-js/issues"
+  },
   "dependencies": {
-    "aes-js": "^3.1.2",
-    "base64url": "^3.0.1",
-    "big-integer": "^1.6.47",
-    "is-buffer": "^2.0.4",
-    "lru-cachify": "^1.0.6"
+    "asymmetric-diffie-hellman": "0.0.6"
+  },
+  "devDependencies": {
+    "esm": "^3.2.25",
+    "tape": "^4.11.0"
   }
 }

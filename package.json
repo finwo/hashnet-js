@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "aes-js": "^3.1.2",
-    "asymmetric-diffie-hellman": "^0.0.8"
+    "asymmetric-diffie-hellman": "^0.0.9"
   },
   "devDependencies": {
     "esm": "^3.2.25",

@@ -6,7 +6,7 @@
   "homepage": "https://github.com/finwo/hashnet-js#readme",
   "scripts": {
     "test": "scripts/test.sh",
-    "start": "nodemon --ignore example/bundle.js example/server.js",
+    "start": "nodemon --ignore example/bundle.js -x 'node -r esm example/server.js'",
     "postpublish": "PACKAGE_VERSION=$(cat package.json | grep \\\"version\\\" | head -1 | awk -F: '{print $2}' | sed 's/[\",]//g' | tr -d '[[:space:]]') && npm deprecate \"hashnet@<${PACKAGE_VERSION}\" \"Rolling release, please update to ${PACKAGE_VERSION}\""
   },
   "repository": {
@@ -19,15 +19,20 @@
     "url": "https://github.com/finwo/hashnet-js/issues"
   },
   "dependencies": {
+    "asymmetric-diffie-hellman": "0.0.9",
     "body-parser": "^1.19.0",
+    "esm": "^3.2.25",
     "express": "^4.17.1",
     "http": "0.0.0",
     "minimist": "^1.2.0",
     "node-fetch": "^2.6.0",
     "simple-peer": "^9.6.2",
+    "url-parse": "^1.4.7",
     "wrtc": "^0.4.4"
   },
   "devDependencies": {
+    "@purtuga/esm-webpack-plugin": "^1.2.1",
+    "browserify": "^16.5.0",
     "nodemon": "^2.0.2",
     "webpack": "^4.41.6",
     "webpack-cli": "^3.3.11"

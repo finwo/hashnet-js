@@ -1,27 +1,13 @@
 const Peer  = require('simple-peer');
 const fetch = require('node-fetch');
+const HashNet = require('../src/index').HashNet;
 
-const peer = new Peer({
-  initiator: true,
-  trickle  : false,
+let net = new HashNet({bootstrap: [
+  location.protocol + '//' + location.host + '/offer',
+]});
+
+net.on('peer', peer => {
+  console.log('PEER', peer);
 });
 
-peer.on('signal', data => {
-  fetch('/offer', {
-    method : 'POST', 
-    body   : JSON.stringify(data),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  }).then(async res => {
-    peer.signal(await res.json());
-  });
-});
-
-peer.on('connect', () => {
-  console.log('CONNECT');
-});
-
-peer.on('data', data => {
-  console.log('data', data.toString());
-});
+console.log(net);

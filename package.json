@@ -6,6 +6,7 @@
   "homepage": "https://github.com/finwo/hashnet-js#readme",
   "scripts": {
     "test": "scripts/test.sh",
+    "start": "nodemon --ignore example/bundle.js example/server.js",
     "postpublish": "PACKAGE_VERSION=$(cat package.json | grep \\\"version\\\" | head -1 | awk -F: '{print $2}' | sed 's/[\",]//g' | tr -d '[[:space:]]') && npm deprecate \"hashnet@<${PACKAGE_VERSION}\" \"Rolling release, please update to ${PACKAGE_VERSION}\""
   },
   "repository": {
@@ -18,11 +19,20 @@
     "url": "https://github.com/finwo/hashnet-js/issues"
   },
   "dependencies": {
-    "aes-js": "^3.1.2",
-    "asymmetric-diffie-hellman": "^0.0.9"
+    "body-parser": "^1.19.0",
+    "express": "^4.17.1",
+    "http": "0.0.0",
+    "minimist": "^1.2.0",
+    "node-fetch": "^2.6.0",
+    "simple-peer": "^9.6.2",
+    "wrtc": "^0.4.4"
   },
   "devDependencies": {
-    "esm": "^3.2.25",
-    "tape": "^4.13.0"
+    "nodemon": "^2.0.2",
+    "webpack": "^4.41.6",
+    "webpack-cli": "^3.3.11"
+  },
+  "funding": {
+    "url": "https://github.com/sponsors/finwo"
   }
 }

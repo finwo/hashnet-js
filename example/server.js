@@ -25,7 +25,3 @@ app.post('/offer', (req, res) => {
 app.listen(port, '0.0.0.0', () => {
   console.log('Listening on 0.0.0.0:'+port);
 });
-
-net.on('peer', peer => {
-
-});

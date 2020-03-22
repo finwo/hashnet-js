@@ -1,13 +1,24 @@
-const Peer  = require('simple-peer');
-const fetch = require('node-fetch');
 const HashNet = require('../src/index').HashNet;
 
-let net = new HashNet({bootstrap: [
-  location.protocol + '//' + location.host + '/offer',
-]});
+let sleep = async n => {
+  return new Promise(r=>setTimeout(r,n));
+}
 
-net.on('peer', peer => {
-  console.log('PEER', peer);
-});
+(async () => {
+  output.innerText += "Generating keypair\n";
+  await sleep(10);
 
-console.log(net);
+  let net = new HashNet({bootstrap: [
+    location.protocol + '//' + location.host + '/offer',
+  ]});
+
+  net.on('peer', peer => {
+    output.innerText+="PEER: " + peer.pubkey + "\n";
+  });
+
+  console.log(net);
+
+})();
+
+
+

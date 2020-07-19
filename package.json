@@ -31,7 +31,7 @@
     "node-fetch": "^2.6.0",
     "simple-peer": "^9.7.2",
     "url-parse": "^1.4.7",
-    "wrtc": "^0.4.5"
+    "wrtc": "^0.4.6"
   },
   "devDependencies": {
     "@purtuga/esm-webpack-plugin": "^1.2.1",

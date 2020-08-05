@@ -1,5 +1,0 @@
-{
-  "events": {
-    "restart": "node node_modules/.bin/webpack-cli --mode development --output example/bundle.js example/client.js"
-  }
-}

@@ -1,23 +1,19 @@
 const EE = require('events').EventEmitter;
 
+// Emulates simple-peer
 function pipeFactory(input, output) {
-  input.writable = true;
-  input.write    = chunk => {
-    if (!input.writable) return;
-    if (null === chunk) {
-      output.write(null);
-      output.emit('end');
-      input.writable = false;
-      return;
-    }
-    output.emit(chunk);
+  input.status   = 'connected';
+  input.send     = chunk => {
+    if (input.status !== 'connected') return;
+    output.emit('data',chunk);
   };
-  input.pipe = receiver => {
-    input.on('data', chunk => {
-      if (!receiver.writable) return;
-      receiver.write(chunk);
-    });
-    return receiver;
+  input.destroy = chunk => {
+    if (input.status !== 'connected') return;
+    if (chunk) input.send(chunk);
+    input.emit('close');
+    output.emit('close');
+    input.status = 'closed';
+    output.status = 'closed';
   };
 }
 

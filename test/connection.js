@@ -1,11 +1,18 @@
 const EE = require('events').EventEmitter;
 
 // Emulates simple-peer
-function pipeFactory(input, output) {
+function pipeFactory(input, output, delay) {
+  delay = delay || 0;
   input.status   = 'connected';
   input.send     = chunk => {
     if (input.status !== 'connected') return;
-    output.emit('data',chunk);
+    if (delay) {
+      setTimeout(() => {
+        output.emit('data', chunk);
+      }, delay);
+    } else {
+      output.emit('data',chunk);
+    }
   };
   input.destroy = chunk => {
     if (input.status !== 'connected') return;
@@ -17,9 +24,9 @@ function pipeFactory(input, output) {
   };
 }
 
-module.exports = () => {
+module.exports = (Adelay = 0, Bdelay = 0) => {
   const fds = [new EE(), new EE()];
-  pipeFactory(fds[0], fds[1]);
-  pipeFactory(fds[1], fds[0]);
+  pipeFactory(fds[0], fds[1], Adelay);
+  pipeFactory(fds[1], fds[0], Bdelay);
   return fds;
 };

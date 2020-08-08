@@ -206,6 +206,7 @@ class Peer extends EventEmitter {
             if (peer.id === peerId) {
               const path = finder.known[peer.id].path;
               resolved = true;
+              clearTimeout(finder.timer);
               resolve(path);
               return;
             }

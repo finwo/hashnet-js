@@ -87,7 +87,6 @@ class Peer extends EventEmitter {
   }
 
   _callProcedureRaw({ routeLabel, connection, procedure, data, callback = true }) {
-    // console.log({routeLabel, connection, procedure, data, callback});
     let   name = '';
     const self = this;
     return new Promise(resolve => {

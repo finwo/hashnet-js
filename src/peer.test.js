@@ -1,6 +1,6 @@
 const test       = require('tape');
 const Peer       = require('./peer');
-const Connection = require('../test/connection');
+const Connection = require('../mock/simple-peer');
 
 function connectPeers(peerA, peerB, Adelay = 0, Bdelay = 0) {
   const conn = Connection(Adelay, Bdelay);
@@ -89,7 +89,7 @@ test('Path finding', async t => {
   // Let the network settle
   await new Promise(r => setTimeout(r, peerOptions.interval * 3));
 
-  // Test fastest path resolve
+  // Test path resolve
   t.deepEqual(await peer[0]._findPath(peer[1].id), [0], 'Peer A to peer B is [0]');
   t.deepEqual(await peer[0]._findPath(peer[2].id), [1], 'Peer A to peer C is [1]');
   t.deepEqual(await peer[0]._findPath(peer[3].id), [1,2], 'Peer A to peer D is [1,2]');

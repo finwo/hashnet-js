@@ -1,5 +1,5 @@
 const test         = require('tape');
-const connection   = require('./connection');
+const connection   = require('./simple-peer');
 const EventEmitter = require('events').EventEmitter;
 
 test('Validating connection mock', async t => {

@@ -237,7 +237,7 @@ class Peer extends EventEmitter {
   // Send message to a specific peer
   async send(data, peerId) {
     const path = await this._findPath(peerId);
-    if (!path) return;
+    if (!path) return false;
     const conn = this.connections[path.shift()];
     conn.send(Buffer.from(JSON.stringify({
       t: 'data',
@@ -246,6 +246,7 @@ class Peer extends EventEmitter {
       h: path,
       r: [],
     })));
+    return true;
   }
 
   // Stops activity

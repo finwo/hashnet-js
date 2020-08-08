@@ -1,4 +1,6 @@
 const EventEmitter = require('events').EventEmitter;
+const BitBuffer    = require('./bitbuffer');
+const msgpack      = require('@ygoe/msgpack');
 
 function randomCharacter(alphabet = '0123456789abcdef') {
   return alphabet.substr(Math.floor(Math.random()*alphabet.length), 1);
@@ -8,35 +10,6 @@ function randomString(length=32, alphabet = '0123456789abcdef') {
   return Array(length).fill(alphabet).map(randomCharacter).join('');
 }
 
-// Message legend:
-//    t     type       Type of the message
-//    h     hop        Hops to destination
-//    r     reverse    Reverse hop path
-//    i     id         Transmitter ID
-//    p     payload    Payload of the message
-//
-// 'ping':
-//    p = timestamp in milliseconds
-//    Poke the receiving peer
-//
-// 'pong':
-//    p = ping's timestamp
-//    Response to the ping message
-//
-// 'preq':
-//    p = n/a
-//
-// 'pres':
-//    p = peers { id: <string:id>, rtt: <integer:round-trip-time>, slot: <integer:hop> }
-//
-// 'data':
-//    p = user message
-//
-
-// Message hopping
-//    If a hop path is detected, incoming messages are relayed to the connection indicated by the hop
-//
-
 class Peer extends EventEmitter {
 
   constructor(options) {
@@ -44,32 +17,98 @@ class Peer extends EventEmitter {
 
     // Setup configurable variables
     Object.assign(this, {
-      id            : randomString(32),
-      interval      : 5000,
-      connections   : [],
-      timeout       : 2000,
+      id             : randomString(32),
+      interval       : 5000,
+      timeout        : 2000,
+      maxConnections : 15,
+      routeLabelSize : 32,
     }, options);
+
+    // Calculate route label size (in bits)
+    this.routeLabelBits = (() => {
+      let size = 1;
+      while(this.maxConnections >= (2**size)) size++;
+      return size;
+    })();
+
+    // Where to track connections & procedures
+    this.connections = [];
+    this.procedures  = {};
+
+    // Handle requests for connection listing (used in path finding)
+    this.addProcedure({ name: 'connectionDiscovery', handler: () => {
+      return this.connections.map(connection => {
+        let routeLabel = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
+        routeLabel.shiftUint(routeLabel.length - this.routeLabelBits);
+        return {
+          id        : connection.id,
+          routeLabel: routeLabel.join(''),
+          rtt       : connection.rtt,
+        };
+      });
+    }});
 
     // Setup timer tick
     this.timer = setInterval(() => {
       this.emit('tick');
     }, this.interval);
 
-    // FindPath statuses
-    this._pathFinders = {};
-
-    // RTT ping
-    this.on('tick', () => {
+    // RTT ping init
+    this.on('tick', async () => {
       for(const connection of this.connections) {
         if (!connection) continue;
-        connection.send(Buffer.from(JSON.stringify({
-          t: 'ping',
-          i: this.id,
-          p: Date.now(),
-          h: [],
-          r: [],
-        })));
+        const response = await this._callProcedureRaw({
+          routeLabel: Buffer.alloc(this.routeLabelSize),
+          connection: connection,
+          procedure : 'ping',
+          data      : { timestamp: Date.now() }
+        });
+        connection.rtt = Date.now() - response.data.timestamp;
+        connection.id  = response.data.id;
       }
+    });
+
+    // RTT ping handler
+    this.addProcedure({ name: 'ping', handler: message => {
+      return {
+        timestamp: message.data.timestamp,
+        id       : this.id,
+      };
+    }});
+  }
+
+  addProcedure({ name, handler }) {
+    (this.procedures[name] = this.procedures[name] || []).push(handler);
+  }
+
+  removeProcedure({ name, handler }) {
+    this.procedures[name] = (this.procedures[name] || []).filter(fn => fn !== handler);
+    if (!this.procedures[name].length) delete this.procedures[name];
+  }
+
+  _callProcedureRaw({ routeLabel, connection, procedure, data, callback = true }) {
+    // console.log({routeLabel, connection, procedure, data, callback});
+    let   name = '';
+    const self = this;
+    return new Promise(resolve => {
+      function handler(data) {
+        self.removeProcedure({ name, handler });
+        resolve(data);
+      }
+      if (callback) {
+        name = randomString(32);
+        this.addProcedure({name, handler});
+      }
+      if ('string' === typeof routeLabel) routeLabel = BitBuffer.from(routeLabel.split('').map(v => parseInt(v)));
+      if (routeLabel instanceof BitBuffer) routeLabel = routeLabel.toBuffer();
+      connection.send(Buffer.concat([
+        routeLabel,
+        Buffer.from([procedure.length]),
+        Buffer.from(procedure),
+        Buffer.from([name.length]),
+        Buffer.from(name),
+        msgpack.encode(data),
+      ]));
     });
   }
 
@@ -92,14 +131,67 @@ class Peer extends EventEmitter {
     }
 
     // Assign slot
-    connection.slot = this.connections.indexOf(connection);
+    connection.slot = this.connections.indexOf(connection) + 1;
 
     // Handle incoming data
-    connection.on('data', (buf) => {
-      const message = JSON.parse(buf);
-      this._hear(message, connection);
-    });
+    connection.on('data', async buf => {
 
+      // Split data & routing
+      const message = {
+        connection: connection,
+        routeLabel: BitBuffer.fromBuffer(buf.slice(0,this.routeLabelSize)),
+        data      : buf.slice(this.routeLabelSize),
+      };
+
+      // Transfer to next host if requested
+      const nextHop = message.routeLabel.shiftUint(this.routeLabelBits);
+      if (nextHop) {
+        const hopConnection = this.connections.find(conn => conn.slot === nextHop);
+        if (!hopConnection) return;
+        let returnHop = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
+        returnHop.shiftUint(returnHop.length - this.routeLabelBits);
+        returnHop.reverse();
+        message.routeLabel.push(...returnHop);
+        hopConnection.send(Buffer.concat([
+          message.routeLabel.toBuffer(),
+          message.data,
+        ]));
+        return;
+      } else {
+        message.routeLabel.unshift(...Array(this.routeLabelBits).fill(0));
+      }
+
+      // No transfer, let's detect the procedure to call
+      message.procedureNameSize = message.data.slice(0,1)[0];
+      message.data              = message.data.slice(1);
+      message.procedureName     = message.data.slice(0,message.procedureNameSize).toString();
+      message.data              = message.data.slice(message.procedureNameSize);
+      message.callbackNameSize  = message.data.slice(0,1)[0];
+      message.data              = message.data.slice(1);
+      message.callbackName      = message.data.slice(0,message.callbackNameSize).toString();
+      message.data              = msgpack.decode(message.data.slice(message.callbackNameSize));
+
+      // Return-less events
+      this.emit(message.procedureName, message.data);
+
+      // Create call queue
+      let queue = new Promise(r => r(message));
+      for(let fn of (this.procedures[message.procedureName]||[()=>null])) {
+        queue = queue.then(fn);
+      }
+
+      // Return the queue result
+      if (message.callbackNameSize) {
+        message.routeLabel.reverse();
+        this._callProcedureRaw({
+          callback  : false,
+          routeLabel: message.routeLabel,
+          connection,
+          procedure: message.callbackName,
+          data     : (await queue) || null,
+        });
+      }
+    });
 
     // Handle lost connections
     connection.on('close', () => {
@@ -107,146 +199,75 @@ class Peer extends EventEmitter {
       if (!~index) return;
       this.connections[index] = null;
     });
-
-  }
-
-  // Incoming data
-  _hear(message, incomingConnection) {
-
-    // Handle passthrough/hop
-    if (message.h.length) {
-      const slot  = message.h.shift();
-      const relay = this.connections.filter(c => c).find(c => c.slot == slot);
-      if (!relay) return;
-      if (incomingConnection) message.r.push(incomingConnection.slot);
-      relay.send(Buffer.from(JSON.stringify(message)));
-      return;
-    }
-
-    switch(message.t) {
-
-      // RTT handlers
-      case 'ping':
-        incomingConnection.id = message.i;
-        incomingConnection.send(Buffer.from(JSON.stringify({
-          t: 'pong',
-          i: this.id,
-          p: message.p,
-          h: message.r,
-          r: [],
-        })));
-        break;
-      case 'pong':
-        if (message.r.length) {
-          // TODO: handle relayed pong
-        } else {
-          incomingConnection.rtt = Date.now() - message.p;
-          incomingConnection.id  = message.i;
-        }
-        break;
-
-      // Peer request (routing purposes)
-      case 'preq':
-        incomingConnection.send(Buffer.from(JSON.stringify({
-          t  : 'pres',
-          i  : this.id,
-          fid: message.fid,
-          p  : this.connections.filter(c => c).map(conn => ({ id: conn.id, rtt: conn.rtt, slot: conn.slot })),
-          h  : message.r,
-          r  : [],
-        })));
-        break;
-      case 'pres':
-        if (!message.fid) return;
-        if (!this._pathFinders[message.fid]) return;
-        this._pathFinders[message.fid].recv(message);
-        break;
-
-      // Data message
-      case 'data':
-        this._hear(message);
-        break;
-
-      default:
-        console.log('UNKNOWN', message);
-        break;
-    }
-
   }
 
   // Find's a path to a certain peer
-  _findPath(peerId) {
-    return new Promise(resolve => {
-      const findId              = randomString(32);
-      let   resolved            = false;
+  async _findPeer(peerId) {
+    const knownPeers = this.connections.reduce((r,conn) => {
+      r[conn.id] = {
+        id        : conn.id,
+        rtt       : conn.rtt,
+        connection: conn,
+        routeLabel: '',
+      };
+      return r;
+    }, {});
+    const peerQueue  = Object.values(knownPeers);
 
-      // Schedule clean-up
-      function timeoutHandler() {
-        if (resolved) return;
-        resolved = true;
-        delete this._pathFinders[findId];
-        resolve(false);
+    // Attempt returning without querying
+    if (knownPeers[peerId]) return knownPeers[peerId];
+
+    // Keep running until there are no more peers to interrogate
+    while(peerQueue.length) {
+      peerQueue.sort((a, b) => a.rtt - b.rtt);
+      const peerInterrogate = peerQueue.shift();
+      const connection      = peerInterrogate.connection;
+      const routeLabel      = BitBuffer.from(
+        (peerInterrogate.routeLabel + '0'.repeat(this.routeLabelSize*8))
+          .substr(0,this.routeLabelSize*8)
+          .split('')
+          .map(v => parseInt(v))
+      );
+
+      // Fetch connected peers from interrogated peer
+      const responseMessage = await this._callProcedureRaw({
+        routeLabel,
+        connection,
+        procedure: 'connectionDiscovery',
+        data     : null,
+      });
+
+      // Add returned peers to the process queue
+      for(let foundPeer of responseMessage.data) {
+        if (knownPeers[foundPeer.id]) continue;
+        knownPeers[foundPeer.id] = foundPeer = {
+          ...foundPeer,
+          connection: peerInterrogate.connection,
+          routeLabel: peerInterrogate.routeLabel + foundPeer.routeLabel,
+          rtt       : peerInterrogate.rtt        + foundPeer.rtt,
+        };
+        if (foundPeer.id === peerId) return foundPeer;
+        peerQueue.push(foundPeer);
       }
 
-      const finder = this._pathFinders[findId] = {
-        timer: setTimeout(timeoutHandler.bind(this), this.timeout),
-        known: {},
-        recv: (message) => {
-          if (resolved) return;
-          clearTimeout(finder.timer);
-          finder.timer = setTimeout(timeoutHandler.bind(this), this.timeout);
-          const self = message.i === this.id;
-          if ((!self) && (!finder.known[message.i])) return;
-          for(const peer of message.p) {
-            if (finder.known[peer.id]) continue;
-            finder.known[peer.id] = {
-              rtt: peer.rtt + (self ? 0 : finder.known[message.i].rtt),
-              path: [].concat(self ? [] : finder.known[message.i].path, [peer.slot]),
-            };
-            if (peer.id === peerId) {
-              const path = finder.known[peer.id].path;
-              resolved = true;
-              clearTimeout(finder.timer);
-              resolve(path);
-              return;
-            }
-            const conn = this.connections[finder.known[peer.id].path[0]];
-            conn.send(Buffer.from(JSON.stringify({
-              t  : 'preq',
-              i  : this.id,
-              fid: findId,
-              h  : finder.known[peer.id].path.slice(1),
-              r  : [],
-            })));
-          }
-        },
-      };
+    }
 
-      // Kick-start resolving routine
-      this._hear({
-        t  : 'pres',
-        fid: findId,
-        i  : this.id,
-        p  : this.connections.map(conn => ({ id: conn.id, rtt: conn.rtt, slot: conn.slot })),
-        h  : [],
-        r  : [],
-      });
-    });
+    return null;
   }
 
   // Send message to a specific peer
   async send(data, peerId) {
-    const path = await this._findPath(peerId);
-    if (!path) return false;
-    const conn = this.connections[path.shift()];
-    conn.send(Buffer.from(JSON.stringify({
-      t: 'data',
-      i: this.id,
-      p: data,
-      h: path,
-      r: [],
-    })));
-    return true;
+    // const path = await this._findPath(peerId);
+    // if (!path) return false;
+    // const conn = this.connections[path.shift()];
+    // conn.send(Buffer.from(JSON.stringify({
+    //   t: 'data',
+    //   i: this.id,
+    //   p: data,
+    //   h: path,
+    //   r: [],
+    // })));
+    // return true;
   }
 
   // Stops activity

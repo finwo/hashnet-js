@@ -190,7 +190,7 @@ class Peer extends EventEmitter {
       // Transfer to next host if requested
       const nextHop = message.routeLabel.shiftUint(this.routeLabelBits);
       if (nextHop) {
-        const hopConnection = this.connections.find(conn => conn.slot === nextHop);
+        const hopConnection = this.connections.filter(c => c).find(conn => conn.slot === nextHop);
         if (!hopConnection) return;
         let returnHop = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
         returnHop.shiftUint(returnHop.length - this.routeLabelBits);

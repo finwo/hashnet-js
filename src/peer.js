@@ -3,6 +3,12 @@ const BitBuffer    = require('./bitbuffer');
 const msgpack      = require('@ygoe/msgpack');
 const crypto       = require('crypto');
 const supercop     = require('supercop');
+const aesjs        = require('aes-js');
+
+const cryptos = {
+  'aes-256-ctr': key => new aesjs.ModeOfOperation.ctr(key),
+};
+const defaultCrypto = 'aes-256-ctr';
 
 function randomCharacter(alphabet = '0123456789abcdef') {
   return alphabet.substr(Math.floor(Math.random()*alphabet.length), 1);
@@ -98,10 +104,10 @@ class Peer extends EventEmitter {
     if (!this.procedures[name].length) delete this.procedures[name];
   }
 
-  _callProcedureRaw({ routeLabel, connection, procedure, data, callback = true }) {
+  _callProcedureRaw({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
     let   name = '';
     const self = this;
-    return new Promise(resolve => {
+    return new Promise(async resolve => {
       function handler(data) {
         self.removeProcedure({ name, handler });
         resolve(data);
@@ -112,13 +118,28 @@ class Peer extends EventEmitter {
       }
       if ('string' === typeof routeLabel) routeLabel = BitBuffer.from(routeLabel.split('').map(v => parseInt(v)));
       if (routeLabel instanceof BitBuffer) routeLabel = routeLabel.toBuffer();
+      let cryptobuf = Buffer.alloc(1).fill(0);
+      let message   = Buffer.concat([msgpack.encode({
+        fn: procedure,
+        cb: name,
+        d : data,
+      })]);
+      if (peerId && peerId.length) {
+        const selectedCrypto = defaultCrypto;
+        const sharedSecret   = await supercop.key_exchange(peerId, this.kp.secretKey);
+        const cipher         = cryptos[selectedCrypto](sharedSecret);
+        cryptobuf = Buffer.concat([
+          Buffer.from([selectedCrypto.length]),
+          Buffer.from(selectedCrypto),
+          Buffer.from([this.kp.publicKey.length]),
+          this.kp.publicKey,
+        ]);
+        message = Buffer.concat([cipher.encrypt(message)]);
+      }
       connection.send(Buffer.concat([
         routeLabel,
-        Buffer.from([procedure.length]),
-        Buffer.from(procedure),
-        Buffer.from([name.length]),
-        Buffer.from(name),
-        msgpack.encode(data),
+        cryptobuf,
+        message,
       ]));
     });
   }
@@ -172,33 +193,45 @@ class Peer extends EventEmitter {
         message.routeLabel.unshift(...Array(this.routeLabelBits).fill(0));
       }
 
-      // No transfer, let's detect the procedure to call
-      message.procedureNameSize = message.data.slice(0,1)[0];
-      message.data              = message.data.slice(1);
-      message.procedureName     = message.data.slice(0,message.procedureNameSize).toString();
-      message.data              = message.data.slice(message.procedureNameSize);
-      message.callbackNameSize  = message.data.slice(0,1)[0];
-      message.data              = message.data.slice(1);
-      message.callbackName      = message.data.slice(0,message.callbackNameSize).toString();
-      message.data              = msgpack.decode(message.data.slice(message.callbackNameSize));
+      // Detect encrypted messages
+      message.cryptoNameSize = message.data.slice(0,1)[0];
+      message.cryptoName     = message.data.slice(1,1 + message.cryptoNameSize).toString();
+      message.data           = message.data.slice(1 + message.cryptoNameSize);
+
+      // Handle encrypted messages
+      if (message.cryptoNameSize) {
+        if (!cryptos[message.cryptoName]) return;
+        message.senderIdSize = message.data.slice(0,1)[0];
+        message.data         = message.data.slice(1);
+        message.senderId     = message.data.slice(0,message.senderIdSize);
+        message.data         = message.data.slice(message.senderIdSize);
+        message.sharedSecret = await supercop.key_exchange(message.senderId, this.kp.secretKey);
+        const cipher         = cryptos[message.cryptoName](message.sharedSecret);
+        message.data         = Buffer.concat([cipher.decrypt(message.data)]);
+      }
+
+      // Decode message
+      message.d    = msgpack.decode(message.data);
+      message.data = message.d.d;
 
       // Return-less events
-      this.emit(message.procedureName, message.data);
+      this.emit(message.d.fn, message.data);
 
       // Create call queue
       let queue = new Promise(r => r(message));
-      for(let fn of (this.procedures[message.procedureName]||[()=>null])) {
+      for(let fn of (this.procedures[message.d.fn]||[()=>null])) {
         queue = queue.then(fn);
       }
 
       // Return the queue result
-      if (message.callbackNameSize) {
+      if (message.d.cb) {
         message.routeLabel.reverse();
         this._callProcedureRaw({
+          peerId    : message.senderId ? message.senderId : Buffer.alloc(0),
           callback  : false,
           routeLabel: message.routeLabel,
           connection,
-          procedure: message.callbackName,
+          procedure: message.d.cb,
           data     : (await queue) || null,
         });
       }
@@ -246,6 +279,7 @@ class Peer extends EventEmitter {
       const responseMessage = await this._callProcedureRaw({
         routeLabel,
         connection,
+        peerId   : peerInterrogate.id,
         procedure: 'connectionDiscovery',
         data     : null,
       });

@@ -38,6 +38,9 @@ test('Validating connection mock', async t => {
   conn[0].send('Atx');
   conn[1].send('Btx');
 
+  // Let the connection settle
+  await new Promise(r => setTimeout(r,0));
+
   // Check if everything was received correctly
   t.equal(Arx, 'Btx', 'A received what B sent');
   t.equal(Brx, 'Atx', 'B received what A sent');

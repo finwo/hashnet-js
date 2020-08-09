@@ -6,13 +6,9 @@ function pipeFactory(input, output, delay) {
   input.status   = 'connected';
   input.send     = chunk => {
     if (input.status !== 'connected') return;
-    if (delay) {
-      setTimeout(() => {
-        output.emit('data', chunk);
-      }, delay);
-    } else {
-      output.emit('data',chunk);
-    }
+    setTimeout(() => {
+      output.emit('data', chunk);
+    }, delay);
   };
   input.destroy = chunk => {
     if (input.status !== 'connected') return;

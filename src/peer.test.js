@@ -38,6 +38,9 @@ test('Remote ID detection', async t => {
     Connection(),
   ];
 
+  // Wait for peers to be ready
+  await Promise.all(peer.map(p => p._ready));
+
   // Attach peers together
   // peer[0] <--> peer[1]
   peer[0].addConnection(connection[0][0]);
@@ -78,6 +81,9 @@ test('Path finding', async t => {
     new Peer(peerOptions),
     new Peer(peerOptions),
   ];
+
+  // Wait for peers to be ready
+  await Promise.all(peer.map(p => p._ready));
 
   // Setup connections
   connectPeers(peer[0], peer[1],  1,  2);

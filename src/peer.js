@@ -1,6 +1,8 @@
 const EventEmitter = require('events').EventEmitter;
 const BitBuffer    = require('./bitbuffer');
 const msgpack      = require('@ygoe/msgpack');
+const crypto       = require('crypto');
+const supercop     = require('supercop');
 
 function randomCharacter(alphabet = '0123456789abcdef') {
   return alphabet.substr(Math.floor(Math.random()*alphabet.length), 1);
@@ -17,12 +19,22 @@ class Peer extends EventEmitter {
 
     // Setup configurable variables
     Object.assign(this, {
-      id             : randomString(32),
+      id             : null,
       interval       : 5000,
       timeout        : 2000,
       maxConnections : 15,
       routeLabelSize : 32,
     }, options);
+
+    // Start generating our ID
+    this._ready = Promise.all([
+      supercop
+        .createKeyPair(crypto.randomBytes(32))
+        .then(keypair => {
+          this.kp = keypair;
+          this.id = keypair.publicKey.toString('hex');
+        })
+    ]);
 
     // Calculate route label size (in bits)
     this.routeLabelBits = (() => {

@@ -107,7 +107,11 @@ class Peer extends EventEmitter {
   _callProcedureRaw({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
     let   name = '';
     const self = this;
+
+    // Use old promise structure to have 2 resolve paths
     return new Promise(async resolve => {
+
+      // callback handler
       function handler(data) {
         self.removeProcedure({ name, handler });
         resolve(data);
@@ -116,14 +120,20 @@ class Peer extends EventEmitter {
         name = randomString(32);
         this.addProcedure({name, handler});
       }
+
+      // Make sure the route label is a bitbuffer
       if ('string' === typeof routeLabel) routeLabel = BitBuffer.from(routeLabel.split('').map(v => parseInt(v)));
       if (routeLabel instanceof BitBuffer) routeLabel = routeLabel.toBuffer();
+
+      // Prepare message as buffer
       let cryptobuf = Buffer.alloc(1).fill(0);
       let message   = Buffer.concat([msgpack.encode({
         fn: procedure,
         cb: name,
         d : data,
       })]);
+
+      // Handle encryption if receiver id is known
       if (peerId && peerId.length) {
         const selectedCrypto = defaultCrypto;
         const sharedSecret   = await supercop.key_exchange(peerId, this.kp.secretKey);
@@ -136,6 +146,8 @@ class Peer extends EventEmitter {
         ]);
         message = Buffer.concat([cipher.encrypt(message)]);
       }
+
+      // Send the message over the wire
       connection.send(Buffer.concat([
         routeLabel,
         cryptobuf,
@@ -262,60 +274,67 @@ class Peer extends EventEmitter {
     // Attempt returning without querying
     if (knownPeers[peerId]) return knownPeers[peerId];
 
-    // Keep running until there are no more peers to interrogate
-    while(peerQueue.length) {
-      peerQueue.sort((a, b) => a.rtt - b.rtt);
-      const peerInterrogate = peerQueue.shift();
-      const peerInterrogateId = peerInterrogate.id.toString('hex');
-      const connection      = peerInterrogate.connection;
-      const routeLabel      = BitBuffer.from(
-        (peerInterrogate.routeLabel + '0'.repeat(this.routeLabelSize*8))
-          .substr(0,this.routeLabelSize*8)
-          .split('')
-          .map(v => parseInt(v))
-      );
+    // Setup timeout
+    let timeoutTimer = null;
+    let resolved     = false;
+    return new Promise(async resolve => {
+      function timeoutHandler() {
+        if (resolved) return;
+        resolved = true;
+        resolve(null);
+      }
+      timeoutTimer = setTimeout(timeoutHandler, this.timeout);
 
-      // Fetch connected peers from interrogated peer
-      const responseMessage = await this._callProcedureRaw({
-        routeLabel,
-        connection,
-        peerId   : peerInterrogate.id,
-        procedure: 'connectionDiscovery',
-        data     : null,
-      });
+      // Keep running until there are no more peers to interrogate
+      while(peerQueue.length) {
 
-      // Add returned peers to the process queue
-      for(let foundPeer of responseMessage.data) {
-        const foundPeerId = foundPeer.id.toString('hex');
-        if (knownPeers[foundPeerId]) continue;
-        knownPeers[foundPeerId] = foundPeer = {
-          ...foundPeer,
-          connection: peerInterrogate.connection,
-          routeLabel: peerInterrogate.routeLabel + foundPeer.routeLabel,
-          rtt       : peerInterrogate.rtt        + foundPeer.rtt,
-        };
-        if (foundPeerId === peerId) return foundPeer;
-        peerQueue.push(foundPeer);
+        // Fetch next peer with lowest RTT
+        peerQueue.sort((a, b) => a.rtt - b.rtt);
+        const peerInterrogate = peerQueue.shift();
+        const peerInterrogateId = peerInterrogate.id.toString('hex');
+        const connection      = peerInterrogate.connection;
+        const routeLabel      = BitBuffer.from(
+          (peerInterrogate.routeLabel + '0'.repeat(this.routeLabelSize*8))
+            .substr(0,this.routeLabelSize*8)
+            .split('')
+            .map(v => parseInt(v))
+        );
+
+        // Fetch connected peers from interrogated peer
+        const responseMessage = await this._callProcedureRaw({
+          routeLabel,
+          connection,
+          peerId   : peerInterrogate.id,
+          procedure: 'connectionDiscovery',
+          data     : null,
+        });
+
+        // Reset timeout
+        if (resolved) return;
+        clearTimeout(timeoutTimer);
+        timeoutTimer = setTimeout(timeoutHandler, this.timeout);
+
+        // Add returned peers to the process queue
+        for(let foundPeer of responseMessage.data) {
+          const foundPeerId = foundPeer.id.toString('hex');
+          if (knownPeers[foundPeerId]) continue;
+          knownPeers[foundPeerId] = foundPeer = {
+            ...foundPeer,
+            connection: peerInterrogate.connection,
+            routeLabel: peerInterrogate.routeLabel + foundPeer.routeLabel,
+            rtt       : peerInterrogate.rtt        + foundPeer.rtt,
+          };
+          if (foundPeerId === peerId) {
+            resolved = true;
+            clearTimeout(timeoutTimer);
+            return resolve(foundPeer);
+          }
+          peerQueue.push(foundPeer);
+        }
+
       }
 
-    }
-
-    return null;
-  }
-
-  // Send message to a specific peer
-  async send(data, peerId) {
-    // const path = await this._findPath(peerId);
-    // if (!path) return false;
-    // const conn = this.connections[path.shift()];
-    // conn.send(Buffer.from(JSON.stringify({
-    //   t: 'data',
-    //   i: this.id,
-    //   p: data,
-    //   h: path,
-    //   r: [],
-    // })));
-    // return true;
+    });
   }
 
   // Stops activity

@@ -32,7 +32,7 @@ class Peer extends EventEmitter {
         .createKeyPair(crypto.randomBytes(32))
         .then(keypair => {
           this.kp = keypair;
-          this.id = keypair.publicKey.toString('hex');
+          this.id = keypair.publicKey;
         })
     ]);
 
@@ -214,8 +214,9 @@ class Peer extends EventEmitter {
 
   // Find's a path to a certain peer
   async _findPeer(peerId) {
+    if (peerId instanceof Buffer) peerId = peerId.toString('hex');
     const knownPeers = this.connections.reduce((r,conn) => {
-      r[conn.id] = {
+      r[conn.id.toString('hex')] = {
         id        : conn.id,
         rtt       : conn.rtt,
         connection: conn,
@@ -232,6 +233,7 @@ class Peer extends EventEmitter {
     while(peerQueue.length) {
       peerQueue.sort((a, b) => a.rtt - b.rtt);
       const peerInterrogate = peerQueue.shift();
+      const peerInterrogateId = peerInterrogate.id.toString('hex');
       const connection      = peerInterrogate.connection;
       const routeLabel      = BitBuffer.from(
         (peerInterrogate.routeLabel + '0'.repeat(this.routeLabelSize*8))
@@ -250,14 +252,15 @@ class Peer extends EventEmitter {
 
       // Add returned peers to the process queue
       for(let foundPeer of responseMessage.data) {
-        if (knownPeers[foundPeer.id]) continue;
-        knownPeers[foundPeer.id] = foundPeer = {
+        const foundPeerId = foundPeer.id.toString('hex');
+        if (knownPeers[foundPeerId]) continue;
+        knownPeers[foundPeerId] = foundPeer = {
           ...foundPeer,
           connection: peerInterrogate.connection,
           routeLabel: peerInterrogate.routeLabel + foundPeer.routeLabel,
           rtt       : peerInterrogate.rtt        + foundPeer.rtt,
         };
-        if (foundPeer.id === peerId) return foundPeer;
+        if (foundPeerId === peerId) return foundPeer;
         peerQueue.push(foundPeer);
       }
 

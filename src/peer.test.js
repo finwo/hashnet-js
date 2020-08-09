@@ -56,12 +56,12 @@ test('Remote ID detection', async t => {
   await new Promise(r => setTimeout(r, peerOptions.interval * 3));
 
   // Check if the IDs were detected correctly
-  t.equal(connection[0][0].id, peer[1].id, 'Peer A detected B\'s id');
-  t.equal(connection[2][1].id, peer[2].id, 'Peer A detected C\'s id');
-  t.equal(connection[0][1].id, peer[0].id, 'Peer B detected A\'s id');
-  t.equal(connection[1][0].id, peer[2].id, 'Peer B detected C\'s id');
-  t.equal(connection[2][0].id, peer[0].id, 'Peer C detected A\'s id');
-  t.equal(connection[1][1].id, peer[1].id, 'Peer C detected B\'s id');
+  t.deepEqual(connection[0][0].id, peer[1].id, 'Peer A detected B\'s id');
+  t.deepEqual(connection[2][1].id, peer[2].id, 'Peer A detected C\'s id');
+  t.deepEqual(connection[0][1].id, peer[0].id, 'Peer B detected A\'s id');
+  t.deepEqual(connection[1][0].id, peer[2].id, 'Peer B detected C\'s id');
+  t.deepEqual(connection[2][0].id, peer[0].id, 'Peer C detected A\'s id');
+  t.deepEqual(connection[1][1].id, peer[1].id, 'Peer C detected B\'s id');
 
   // Shutdown peers
   peer[0].shutdown();
@@ -116,7 +116,7 @@ test('Path finding', async t => {
   found = await peer[4]._findPeer(peer[0].id); t.equal(found.routeLabel, '00010010', 'Peer E can route to peer A');
   found = await peer[4]._findPeer(peer[1].id); t.equal(found.routeLabel, '00010001', 'Peer E can route to peer B');
   found = await peer[4]._findPeer(peer[2].id); t.equal(found.routeLabel, '0001'    , 'Peer E can route to peer C');
-  found = await peer[4]._findPeer(peer[3].id); t.equal(found.routeLabel, ''        , 'Peer E can route to peer D');
+  found = await peer[4]._findPeer(peer[3].id); t.equal(found.routeLabel, ''        , 'Peer E is directly connected to peer D');
 
   // Shutdown peers
   for(const p of peer) {

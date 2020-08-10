@@ -25,22 +25,27 @@ class Peer extends EventEmitter {
 
     // Setup configurable variables
     Object.assign(this, {
-      id             : null,
       interval       : 5000,
       timeout        : 2000,
       maxConnections : 15,
       routeLabelSize : 32,
+      kp             : null,
+      localOnly      : [
+        'ready',
+        'tick',
+      ],
     }, options);
+    this.id = null;
 
     // Start generating our ID
     this._ready = Promise.all([
-      supercop
-        .createKeyPair(crypto.randomBytes(32))
-        .then(keypair => {
-          this.kp = keypair;
-          this.id = keypair.publicKey;
-        })
-    ]);
+      (async () => {
+        if (!this.kp) this.kp = await supercop.createKeyPair(crypto.randomBytes(32));
+        this.id = this.kp.publicKey;
+      })(),
+    ]).then(() => {
+      this.emit('ready');
+    });
 
     // Calculate route label size (in bits)
     this.routeLabelBits = (() => {
@@ -75,7 +80,7 @@ class Peer extends EventEmitter {
     this.on('tick', async () => {
       for(const connection of this.connections) {
         if (!connection) continue;
-        const response = await this._callProcedureRaw({
+        const response = await this._callProcedure({
           routeLabel: Buffer.alloc(this.routeLabelSize),
           connection: connection,
           procedure : 'ping',
@@ -104,7 +109,7 @@ class Peer extends EventEmitter {
     if (!this.procedures[name].length) delete this.procedures[name];
   }
 
-  _callProcedureRaw({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
+  _callProcedure({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
     let   name = '';
     const self = this;
 
@@ -226,8 +231,13 @@ class Peer extends EventEmitter {
       message.d    = msgpack.decode(message.data);
       message.data = message.d.d;
 
-      // Return-less events
-      this.emit(message.d.fn, message.data);
+      // Handle local-only
+      if (~message.d) return;
+      if (~message.d.fn) return;
+      if (~this.localOnly.indexOf(message.d.fn)) return;
+
+      // Emit events without return
+      this.emit(message.d.fn, message);
 
       // Create call queue
       let queue = new Promise(r => r(message));
@@ -238,7 +248,7 @@ class Peer extends EventEmitter {
       // Return the queue result
       if (message.d.cb) {
         message.routeLabel.reverse();
-        this._callProcedureRaw({
+        this._callProcedure({
           peerId    : message.senderId ? message.senderId : Buffer.alloc(0),
           callback  : false,
           routeLabel: message.routeLabel,
@@ -301,7 +311,7 @@ class Peer extends EventEmitter {
         );
 
         // Fetch connected peers from interrogated peer
-        const responseMessage = await this._callProcedureRaw({
+        const responseMessage = await this._callProcedure({
           routeLabel,
           connection,
           peerId   : peerInterrogate.id,

@@ -75,7 +75,7 @@ class Peer extends EventEmitter {
     this.on('tick', async () => {
       for(const connection of this.connections) {
         if (!connection) continue;
-        const response = await this._callProcedureRaw({
+        const response = await this._callProcedure({
           routeLabel: Buffer.alloc(this.routeLabelSize),
           connection: connection,
           procedure : 'ping',
@@ -104,7 +104,7 @@ class Peer extends EventEmitter {
     if (!this.procedures[name].length) delete this.procedures[name];
   }
 
-  _callProcedureRaw({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
+  _callProcedure({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
     let   name = '';
     const self = this;
 
@@ -238,7 +238,7 @@ class Peer extends EventEmitter {
       // Return the queue result
       if (message.d.cb) {
         message.routeLabel.reverse();
-        this._callProcedureRaw({
+        this._callProcedure({
           peerId    : message.senderId ? message.senderId : Buffer.alloc(0),
           callback  : false,
           routeLabel: message.routeLabel,
@@ -301,7 +301,7 @@ class Peer extends EventEmitter {
         );
 
         // Fetch connected peers from interrogated peer
-        const responseMessage = await this._callProcedureRaw({
+        const responseMessage = await this._callProcedure({
           routeLabel,
           connection,
           peerId   : peerInterrogate.id,

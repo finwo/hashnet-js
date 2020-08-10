@@ -30,6 +30,10 @@ class Peer extends EventEmitter {
       timeout        : 2000,
       maxConnections : 15,
       routeLabelSize : 32,
+      localOnly      : [
+        'ready',
+        'tick',
+      ],
     }, options);
 
     // Start generating our ID
@@ -224,6 +228,9 @@ class Peer extends EventEmitter {
 
       // Decode message
       message.d    = msgpack.decode(message.data);
+      if (!message.d) return;
+      if (!message.d.fn) return;
+      if (~this.localOnly.indexOf(message.d.fn)) return;
       message.data = message.d.d;
 
       // Return-less events

@@ -229,6 +229,9 @@ class Peer extends EventEmitter {
 
       // Decode message
       message.d    = msgpack.decode(message.data);
+      if (!message.d) return;
+      if (!message.d.fn) return;
+      if (~this.localOnly.indexOf(message.d.fn)) return;
       message.data = message.d.d;
 
       // Handle local-only

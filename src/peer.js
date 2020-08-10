@@ -140,7 +140,7 @@ class Peer extends EventEmitter {
       // Handle encryption if receiver id is known
       if (peerId && peerId.length) {
         const selectedCrypto = defaultCrypto;
-        const sharedSecret   = await supercop.key_exchange(peerId, this.kp.secretKey);
+        const sharedSecret   = await supercop.keyExchange(peerId, this.kp.secretKey);
         const cipher         = cryptos[selectedCrypto](sharedSecret);
         cryptobuf = Buffer.concat([
           Buffer.from([selectedCrypto.length]),
@@ -221,7 +221,7 @@ class Peer extends EventEmitter {
         message.data         = message.data.slice(1);
         message.senderId     = message.data.slice(0,message.senderIdSize);
         message.data         = message.data.slice(message.senderIdSize);
-        message.sharedSecret = await supercop.key_exchange(message.senderId, this.kp.secretKey);
+        message.sharedSecret = await supercop.keyExchange(message.senderId, this.kp.secretKey);
         const cipher         = cryptos[message.cryptoName](message.sharedSecret);
         message.data         = Buffer.concat([cipher.decrypt(message.data)]);
       }

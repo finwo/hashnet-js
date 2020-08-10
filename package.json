@@ -22,6 +22,9 @@
   "dependencies": {
     "@ygoe/msgpack": "^1.0.2",
     "aes-js": "^3.1.2",
-    "supercop": "^2.1.0"
+    "supercop": "^2.1.3"
+  },
+  "funding": {
+    "url": "https://github.com/sponsors/finwo"
   }
 }

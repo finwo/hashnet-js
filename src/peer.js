@@ -1,14 +1,14 @@
 const EventEmitter = require('events').EventEmitter;
 const BitBuffer    = require('./bitbuffer');
 const msgpack      = require('@ygoe/msgpack');
-const crypto       = require('crypto');
-const supercop     = require('supercop');
-const aesjs        = require('aes-js');
+// const crypto       = require('crypto');
+// const supercop     = require('supercop');
+// const aesjs        = require('aes-js');
 
-const cryptos = {
-  'aes-256-ctr': key => new aesjs.ModeOfOperation.ctr(key),
-};
-const defaultCrypto = 'aes-256-ctr';
+// const cryptos = {
+//   'aes-256-ctr': key => new aesjs.ModeOfOperation.ctr(key),
+// };
+// const defaultCrypto = 'aes-256-ctr';
 
 function randomCharacter(alphabet = '0123456789abcdef') {
   return alphabet.substr(Math.floor(Math.random()*alphabet.length), 1);
@@ -30,21 +30,22 @@ class Peer extends EventEmitter {
       timeout        : 2000,
       maxConnections : 15,
       routeLabelSize : 32,
-      localOnly      : [
-        'ready',
-        'tick',
-      ],
     }, options);
 
-    // Start generating our ID
-    this._ready = Promise.all([
-      supercop
-        .createKeyPair(crypto.randomBytes(32))
-        .then(keypair => {
-          this.kp = keypair;
-          this.id = keypair.publicKey;
-        })
-    ]);
+    // No ID = generate one
+    if (!this.id) {
+      this.id = Buffer.from(randomString(64), 'hex');
+    }
+
+//     // Start generating our ID
+//     this._ready = Promise.all([
+//       supercop
+//         .createKeyPair(crypto.randomBytes(32))
+//         .then(keypair => {
+//           this.kp = keypair;
+//           this.id = keypair.publicKey;
+//         })
+//     ]);
 
     // Calculate route label size (in bits)
     this.routeLabelBits = (() => {
@@ -57,18 +58,18 @@ class Peer extends EventEmitter {
     this.connections = [];
     this.procedures  = {};
 
-    // Handle requests for connection listing (used in path finding)
-    this.addProcedure({ name: 'connectionDiscovery', handler: () => {
-      return this.connections.map(connection => {
-        let routeLabel = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
-        routeLabel.shiftUint(routeLabel.length - this.routeLabelBits);
-        return {
-          id        : connection.id,
-          routeLabel: routeLabel.join(''),
-          rtt       : connection.rtt,
-        };
-      });
-    }});
+//     // Handle requests for connection listing (used in path finding)
+//     this.addProcedure({ name: 'connectionDiscovery', handler: () => {
+//       return this.connections.map(connection => {
+//         let routeLabel = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
+//         routeLabel.shiftUint(routeLabel.length - this.routeLabelBits);
+//         return {
+//           id        : connection.id,
+//           routeLabel: routeLabel.join(''),
+//           rtt       : connection.rtt,
+//         };
+//       });
+//     }});
 
     // Setup timer tick
     this.timer = setInterval(() => {
@@ -79,23 +80,36 @@ class Peer extends EventEmitter {
     this.on('tick', async () => {
       for(const connection of this.connections) {
         if (!connection) continue;
-        const response = await this._callProcedure({
-          routeLabel: Buffer.alloc(this.routeLabelSize),
-          connection: connection,
-          procedure : 'ping',
-          data      : { timestamp: Date.now() }
-        });
-        connection.rtt = Date.now() - response.data.timestamp;
-        connection.id  = response.data.id;
+        const data    = msgpack.encode({ fn: 'ping', cb: 'pong', d: Date.now() });
+        const message = Buffer.concat([
+          Buffer.alloc(this.routeLabelSize), // Route label (0 = no hops)
+          Buffer.from([0]),                  // 0 = no extensions
+          data,                              // msgpack-encoded message
+        ]);
+        connection.socket.send(message);
+//         const response = await this._callProcedure({
+//           routeLabel: Buffer.alloc(this.routeLabelSize),
+//           connection: connection,
+//           procedure : 'ping',
+//           data      : { timestamp: Date.now() }
+//         });
+//         connection.rtt = Date.now() - response.data.timestamp;
+//         connection.id  = response.data.id;
       }
     });
 
     // RTT ping handler
-    this.addProcedure({ name: 'ping', handler: message => {
+    this.addProcedure({ name: 'ping', handler: ({data}) => {
       return {
-        timestamp: message.data.timestamp,
+        timestamp: data,
         id       : this.id,
       };
+    }});
+
+    // RTT response handler
+    this.addProcedure({ name: 'pong', handler: ({data, connection}) => {
+      connection.id  = data.id;
+      connection.rtt = Date.now() - data.timestamp;
     }});
   }
 
@@ -103,65 +117,71 @@ class Peer extends EventEmitter {
     (this.procedures[name] = this.procedures[name] || []).push(handler);
   }
 
-  removeProcedure({ name, handler }) {
-    this.procedures[name] = (this.procedures[name] || []).filter(fn => fn !== handler);
-    if (!this.procedures[name].length) delete this.procedures[name];
-  }
+//   removeProcedure({ name, handler }) {
+//     this.procedures[name] = (this.procedures[name] || []).filter(fn => fn !== handler);
+//     if (!this.procedures[name].length) delete this.procedures[name];
+//   }
 
-  _callProcedure({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
-    let   name = '';
-    const self = this;
+//   _callProcedure({ routeLabel, peerId = null, connection, procedure, data, callback = true }) {
+//     let   name = '';
+//     const self = this;
 
-    // Use old promise structure to have 2 resolve paths
-    return new Promise(async resolve => {
+//     // Use old promise structure to have 2 resolve paths
+//     return new Promise(async resolve => {
 
-      // callback handler
-      function handler(data) {
-        self.removeProcedure({ name, handler });
-        resolve(data);
-      }
-      if (callback) {
-        name = randomString(32);
-        this.addProcedure({name, handler});
-      }
+//       // callback handler
+//       function handler(data) {
+//         self.removeProcedure({ name, handler });
+//         resolve(data);
+//       }
+//       if (callback) {
+//         name = randomString(32);
+//         this.addProcedure({name, handler});
+//       }
 
-      // Make sure the route label is a bitbuffer
-      if ('string' === typeof routeLabel) routeLabel = BitBuffer.from(routeLabel.split('').map(v => parseInt(v)));
-      if (routeLabel instanceof BitBuffer) routeLabel = routeLabel.toBuffer();
+//       // Make sure the route label is a bitbuffer
+//       if ('string' === typeof routeLabel) routeLabel = BitBuffer.from(routeLabel.split('').map(v => parseInt(v)));
+//       if (routeLabel instanceof BitBuffer) routeLabel = routeLabel.toBuffer();
 
-      // Prepare message as buffer
-      let cryptobuf = Buffer.alloc(1).fill(0);
-      let message   = Buffer.concat([msgpack.encode({
-        fn: procedure,
-        cb: name,
-        d : data,
-      })]);
+//       // Prepare message as buffer
+//       let cryptobuf = Buffer.alloc(1).fill(0);
+//       let message   = Buffer.concat([msgpack.encode({
+//         fn: procedure,
+//         cb: name,
+//         d : data,
+//       })]);
 
-      // Handle encryption if receiver id is known
-      if (peerId && peerId.length) {
-        const selectedCrypto = defaultCrypto;
-        const sharedSecret   = await supercop.keyExchange(peerId, this.kp.secretKey);
-        const cipher         = cryptos[selectedCrypto](sharedSecret);
-        cryptobuf = Buffer.concat([
-          Buffer.from([selectedCrypto.length]),
-          Buffer.from(selectedCrypto),
-          Buffer.from([this.kp.publicKey.length]),
-          this.kp.publicKey,
-        ]);
-        message = Buffer.concat([cipher.encrypt(message)]);
-      }
+//       // Handle encryption if receiver id is known
+//       if (peerId && peerId.length) {
+//         const selectedCrypto = defaultCrypto;
+//         const sharedSecret   = await supercop.keyExchange(peerId, this.kp.secretKey);
+//         const cipher         = cryptos[selectedCrypto](sharedSecret);
+//         cryptobuf = Buffer.concat([
+//           Buffer.from([selectedCrypto.length]),
+//           Buffer.from(selectedCrypto),
+//           Buffer.from([this.kp.publicKey.length]),
+//           this.kp.publicKey,
+//         ]);
+//         message = Buffer.concat([cipher.encrypt(message)]);
+//       }
 
-      // Send the message over the wire
-      connection.send(Buffer.concat([
-        routeLabel,
-        cryptobuf,
-        message,
-      ]));
-    });
-  }
+//       // Send the message over the wire
+//       connection.send(Buffer.concat([
+//         routeLabel,
+//         cryptobuf,
+//         message,
+//       ]));
+//     });
+//   }
 
   // Handle adding a connection
-  addConnection(connection) {
+  addConnection(socket) {
+    const connection = { socket };
+
+    // Prevent too many connections
+    if (this.connections.length >= this.maxConnections) {
+      return 'too-many-connections';
+    }
 
     // Re-use old slot if available
     let reusedSlot = false;
@@ -182,7 +202,7 @@ class Peer extends EventEmitter {
     connection.slot = this.connections.indexOf(connection) + 1;
 
     // Handle incoming data
-    connection.on('data', async buf => {
+    connection.socket.on('data', async buf => {
 
       // Split data & routing
       const message = {
@@ -194,70 +214,87 @@ class Peer extends EventEmitter {
       // Transfer to next host if requested
       const nextHop = message.routeLabel.shiftUint(this.routeLabelBits);
       if (nextHop) {
-        const hopConnection = this.connections.filter(c => c).find(conn => conn.slot === nextHop);
-        if (!hopConnection) return;
-        let returnHop = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
-        returnHop.shiftUint(returnHop.length - this.routeLabelBits);
-        returnHop.reverse();
-        message.routeLabel.push(...returnHop);
-        hopConnection.send(Buffer.concat([
-          message.routeLabel.toBuffer(),
-          message.data,
-        ]));
-        return;
+//         const hopConnection = this.connections.filter(c => c).find(conn => conn.slot === nextHop);
+//         if (!hopConnection) return;
+//         let returnHop = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
+//         returnHop.shiftUint(returnHop.length - this.routeLabelBits);
+//         returnHop.reverse();
+//         message.routeLabel.push(...returnHop);
+//         hopConnection.send(Buffer.concat([
+//           message.routeLabel.toBuffer(),
+//           message.data,
+//         ]));
+//         return;
       } else {
         message.routeLabel.unshift(...Array(this.routeLabelBits).fill(0));
       }
 
-      // Detect encrypted messages
-      message.cryptoNameSize = message.data.slice(0,1)[0];
-      message.cryptoName     = message.data.slice(1,1 + message.cryptoNameSize).toString();
-      message.data           = message.data.slice(1 + message.cryptoNameSize);
+      // Detect protocol extensions
+      message.extensionSize = message.data.slice(0,1)[0];
+      message.data          = message.data.slice(1);
 
-      // Handle encrypted messages
-      if (message.cryptoNameSize) {
-        if (!cryptos[message.cryptoName]) return;
-        message.senderIdSize = message.data.slice(0,1)[0];
-        message.data         = message.data.slice(1);
-        message.senderId     = message.data.slice(0,message.senderIdSize);
-        message.data         = message.data.slice(message.senderIdSize);
-        message.sharedSecret = await supercop.keyExchange(message.senderId, this.kp.secretKey);
-        const cipher         = cryptos[message.cryptoName](message.sharedSecret);
-        message.data         = Buffer.concat([cipher.decrypt(message.data)]);
-      }
+      /* * * * * * * * * * * * * * * * * *\
+       * No extensions are supported yet *
+      \* * * * * * * * * * * * * * * * * */
+
+//       // Detect encrypted messages
+//       message.cryptoNameSize = message.data.slice(0,1)[0];
+//       message.cryptoName     = message.data.slice(1,1 + message.cryptoNameSize).toString();
+//       message.data           = message.data.slice(1 + message.cryptoNameSize);
+
+//       // Handle encrypted messages
+//       if (message.cryptoNameSize) {
+//         if (!cryptos[message.cryptoName]) return;
+//         message.senderIdSize = message.data.slice(0,1)[0];
+//         message.data         = message.data.slice(1);
+//         message.senderId     = message.data.slice(0,message.senderIdSize);
+//         message.data         = message.data.slice(message.senderIdSize);
+//         message.sharedSecret = await supercop.keyExchange(message.senderId, this.kp.secretKey);
+//         const cipher         = cryptos[message.cryptoName](message.sharedSecret);
+//         message.data         = Buffer.concat([cipher.decrypt(message.data)]);
+//       }
 
       // Decode message
-      message.d    = msgpack.decode(message.data);
+      message.d = msgpack.decode(message.data);
       if (!message.d) return;
       if (!message.d.fn) return;
-      if (~this.localOnly.indexOf(message.d.fn)) return;
       message.data = message.d.d;
+//       if (~this.localOnly.indexOf(message.d.fn)) return;
 
-      // Return-less events
-      this.emit(message.d.fn, message.data);
+//       // Return-less events
+//       this.emit(message.d.fn, message.data);
 
       // Create call queue
-      let queue = new Promise(r => r(message));
-      for(let fn of (this.procedures[message.d.fn]||[()=>null])) {
+      let queue = Promise.resolve(message);
+      for(const fn of (this.procedures[message.d.fn]||[()=>null])) {
         queue = queue.then(fn);
       }
 
       // Return the queue result
       if (message.d.cb) {
         message.routeLabel.reverse();
-        this._callProcedure({
-          peerId    : message.senderId ? message.senderId : Buffer.alloc(0),
-          callback  : false,
-          routeLabel: message.routeLabel,
-          connection,
-          procedure: message.d.cb,
-          data     : (await queue) || null,
-        });
+        const data = msgpack.encode({ fn: message.d.cb, d: await queue });
+        const msg  = Buffer.concat([
+          message.routeLabel.toBuffer(),
+          Buffer.from([0]),                  // 0 = no extensions
+          data,                              // msgpack-encoded message
+        ]);
+        connection.socket.send(msg);
+//         this._callProcedure({
+//           peerId    : message.senderId ? message.senderId : Buffer.alloc(0),
+//           callback  : false,
+//           routeLabel: message.routeLabel,
+//           connection,
+//           procedure: message.d.cb,
+//           data     : (await queue) || null,
+//         });
       }
+
+      // console.log(message);
     });
 
     // Handle lost connections
-    connection.on('close', () => {
+    connection.socket.on('close', () => {
       const index = this.connections.indexOf(connection);
       if (!~index) return;
       this.connections[index] = null;
@@ -267,81 +304,83 @@ class Peer extends EventEmitter {
   // Find's a path to a certain peer
   async _findPeer(peerId) {
     if (peerId instanceof Buffer) peerId = peerId.toString('hex');
-    const knownPeers = this.connections.reduce((r,conn) => {
-      r[conn.id.toString('hex')] = {
-        id        : conn.id,
-        rtt       : conn.rtt,
-        connection: conn,
-        routeLabel: '',
-      };
-      return r;
-    }, {});
-    const peerQueue  = Object.values(knownPeers);
 
-    // Attempt returning without querying
-    if (knownPeers[peerId]) return knownPeers[peerId];
+    console.log(peerId);
+//     const knownPeers = this.connections.reduce((r,conn) => {
+//       r[conn.id.toString('hex')] = {
+//         id        : conn.id,
+//         rtt       : conn.rtt,
+//         connection: conn,
+//         routeLabel: '',
+//       };
+//       return r;
+//     }, {});
+//     const peerQueue  = Object.values(knownPeers);
 
-    // Setup timeout
-    let timeoutTimer = null;
-    let resolved     = false;
-    return new Promise(async resolve => {
-      function timeoutHandler() {
-        if (resolved) return;
-        resolved = true;
-        resolve(null);
-      }
-      timeoutTimer = setTimeout(timeoutHandler, this.timeout);
+//     // Attempt returning without querying
+//     if (knownPeers[peerId]) return knownPeers[peerId];
 
-      // Keep running until there are no more peers to interrogate
-      while(peerQueue.length) {
+//     // Setup timeout
+//     let timeoutTimer = null;
+//     let resolved     = false;
+//     return new Promise(async resolve => {
+//       function timeoutHandler() {
+//         if (resolved) return;
+//         resolved = true;
+//         resolve(null);
+//       }
+//       timeoutTimer = setTimeout(timeoutHandler, this.timeout);
 
-        // Fetch next peer with lowest RTT
-        peerQueue.sort((a, b) => a.rtt - b.rtt);
-        const peerInterrogate = peerQueue.shift();
-        const peerInterrogateId = peerInterrogate.id.toString('hex');
-        const connection      = peerInterrogate.connection;
-        const routeLabel      = BitBuffer.from(
-          (peerInterrogate.routeLabel + '0'.repeat(this.routeLabelSize*8))
-            .substr(0,this.routeLabelSize*8)
-            .split('')
-            .map(v => parseInt(v))
-        );
+//       // Keep running until there are no more peers to interrogate
+//       while(peerQueue.length) {
 
-        // Fetch connected peers from interrogated peer
-        const responseMessage = await this._callProcedure({
-          routeLabel,
-          connection,
-          peerId   : peerInterrogate.id,
-          procedure: 'connectionDiscovery',
-          data     : null,
-        });
+//         // Fetch next peer with lowest RTT
+//         peerQueue.sort((a, b) => a.rtt - b.rtt);
+//         const peerInterrogate = peerQueue.shift();
+//         const peerInterrogateId = peerInterrogate.id.toString('hex');
+//         const connection      = peerInterrogate.connection;
+//         const routeLabel      = BitBuffer.from(
+//           (peerInterrogate.routeLabel + '0'.repeat(this.routeLabelSize*8))
+//             .substr(0,this.routeLabelSize*8)
+//             .split('')
+//             .map(v => parseInt(v))
+//         );
 
-        // Reset timeout
-        if (resolved) return;
-        clearTimeout(timeoutTimer);
-        timeoutTimer = setTimeout(timeoutHandler, this.timeout);
+//         // Fetch connected peers from interrogated peer
+//         const responseMessage = await this._callProcedure({
+//           routeLabel,
+//           connection,
+//           peerId   : peerInterrogate.id,
+//           procedure: 'connectionDiscovery',
+//           data     : null,
+//         });
 
-        // Add returned peers to the process queue
-        for(let foundPeer of responseMessage.data) {
-          const foundPeerId = foundPeer.id.toString('hex');
-          if (knownPeers[foundPeerId]) continue;
-          knownPeers[foundPeerId] = foundPeer = {
-            ...foundPeer,
-            connection: peerInterrogate.connection,
-            routeLabel: peerInterrogate.routeLabel + foundPeer.routeLabel,
-            rtt       : peerInterrogate.rtt        + foundPeer.rtt,
-          };
-          if (foundPeerId === peerId) {
-            resolved = true;
-            clearTimeout(timeoutTimer);
-            return resolve(foundPeer);
-          }
-          peerQueue.push(foundPeer);
-        }
+//         // Reset timeout
+//         if (resolved) return;
+//         clearTimeout(timeoutTimer);
+//         timeoutTimer = setTimeout(timeoutHandler, this.timeout);
 
-      }
+//         // Add returned peers to the process queue
+//         for(let foundPeer of responseMessage.data) {
+//           const foundPeerId = foundPeer.id.toString('hex');
+//           if (knownPeers[foundPeerId]) continue;
+//           knownPeers[foundPeerId] = foundPeer = {
+//             ...foundPeer,
+//             connection: peerInterrogate.connection,
+//             routeLabel: peerInterrogate.routeLabel + foundPeer.routeLabel,
+//             rtt       : peerInterrogate.rtt        + foundPeer.rtt,
+//           };
+//           if (foundPeerId === peerId) {
+//             resolved = true;
+//             clearTimeout(timeoutTimer);
+//             return resolve(foundPeer);
+//           }
+//           peerQueue.push(foundPeer);
+//         }
 
-    });
+//       }
+
+//     });
   }
 
   // Stops activity
@@ -355,7 +394,7 @@ class Peer extends EventEmitter {
     // Close all connections
     for(const connection of this.connections) {
       if (!connection) continue;
-      connection.destroy();
+      connection.socket.destroy();
     }
 
   }

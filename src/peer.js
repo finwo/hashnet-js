@@ -71,6 +71,7 @@ class Peer extends EventEmitter {
           procedure  : 'ping',
           data       : Date.now(),
         });
+        if (!response) continue;
         connection.rtt = Date.now() - response.data.timestamp;
         connection.id  = response.data.id;
       }
@@ -102,10 +103,12 @@ class Peer extends EventEmitter {
 
   _callProcedure({ routeLabel, connection, socket, procedure, data, getResponse = true }) {
     return new Promise(async resolve => {
-      const name = randomString(32);
+      const name     = randomString(32);
+      let   finished = false;
 
       // Callback handler
       const handler = data => {
+        finished = true;
         this.removeProcedure({ name, handler });
         resolve(data);
       };
@@ -113,6 +116,11 @@ class Peer extends EventEmitter {
       // Register callback
       if (getResponse) {
         this.addProcedure({ name, handler });
+        setTimeout(() => {
+          if (finished) return;
+          this.removeProcedure({ name, handler });
+          resolve(null);
+        }, this.timeout);
       }
 
       // Make sure the route label is a buffer
@@ -294,6 +302,9 @@ class Peer extends EventEmitter {
         procedure : 'connectionDiscovery',
         data      : Date.now(),
       });
+      if (!response) {
+        continue;
+      }
 
       // Add found peers to the set
       const rtt = Date.now() - response.data.timestamp;

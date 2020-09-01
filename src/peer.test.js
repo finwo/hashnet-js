@@ -106,43 +106,43 @@ test('Path finding', async t => {
   }
 });
 
-// test('Path finding timeout', async t => {
-//   t.plan(12);
-//   const peerOptions = { interval: 1000, timeout: 800 };
-// 
-//   // Setup peers
-//   const peer = [
-//     new Peer(peerOptions),
-//     new Peer(peerOptions),
-//     new Peer(peerOptions),
-//     new Peer(peerOptions),
-//   ];
-// 
-//   // Connect peers over slow connections
-//   connectPeers(peer[0], peer[1], 333, 333);
-//   connectPeers(peer[1], peer[2], 333, 333);
-//   connectPeers(peer[2], peer[3], 333, 333);
-// 
-//   // Let the network settle
-//   await new Promise(r => setTimeout(r, peerOptions.interval * 3));
-// 
-//   // The actual tests
-//   let found;
-//   found = await peer[0]._findPeer(peer[1].id); t.ok(found, 'Peer A can find peer B');
-//   found = await peer[0]._findPeer(peer[2].id); t.ok(found, 'Peer A can find peer C');
-//   found = await peer[0]._findPeer(peer[3].id); t.notOk(found, 'Peer A can not find peer D');
-//   found = await peer[1]._findPeer(peer[0].id); t.ok(found, 'Peer B can find peer A');
-//   found = await peer[1]._findPeer(peer[2].id); t.ok(found, 'Peer B can find peer C');
-//   found = await peer[1]._findPeer(peer[3].id); t.ok(found, 'Peer B can find peer D');
-//   found = await peer[2]._findPeer(peer[0].id); t.ok(found, 'Peer C can find peer A');
-//   found = await peer[2]._findPeer(peer[1].id); t.ok(found, 'Peer C can find peer B');
-//   found = await peer[2]._findPeer(peer[3].id); t.ok(found, 'Peer C can find peer D');
-//   found = await peer[3]._findPeer(peer[0].id); t.notOk(found, 'Peer D can not find peer A');
-//   found = await peer[3]._findPeer(peer[1].id); t.ok(found, 'Peer D can find peer B');
-//   found = await peer[3]._findPeer(peer[2].id); t.ok(found, 'Peer D can find peer C');
-// 
-//   // Shutdown peers
-//   for(const p of peer) {
-//     p.shutdown();
-//   }
-// });
+test('Path finding timeout', async t => {
+  t.plan(12);
+  const peerOptions = { interval: 1000, timeout: 700 };
+
+  // Setup peers
+  const peer = [
+    new Peer(peerOptions),
+    new Peer(peerOptions),
+    new Peer(peerOptions),
+    new Peer(peerOptions),
+  ];
+
+  // Connect peers over slow connections
+  connectPeers(peer[0], peer[1], 200, 200);
+  connectPeers(peer[1], peer[2], 200, 200);
+  connectPeers(peer[2], peer[3], 200, 200);
+
+  // Let the network settle
+  await new Promise(r => setTimeout(r, peerOptions.interval * 3));
+
+  // The actual tests
+  let found;
+  found = await peer[0]._findPeer(peer[1].id); t.ok(found, 'Peer A can find peer B');
+  found = await peer[0]._findPeer(peer[2].id); t.ok(found, 'Peer A can find peer C');
+  found = await peer[0]._findPeer(peer[3].id); t.notOk(found, 'Peer A can not find peer D');
+  found = await peer[1]._findPeer(peer[0].id); t.ok(found, 'Peer B can find peer A');
+  found = await peer[1]._findPeer(peer[2].id); t.ok(found, 'Peer B can find peer C');
+  found = await peer[1]._findPeer(peer[3].id); t.ok(found, 'Peer B can find peer D');
+  found = await peer[2]._findPeer(peer[0].id); t.ok(found, 'Peer C can find peer A');
+  found = await peer[2]._findPeer(peer[1].id); t.ok(found, 'Peer C can find peer B');
+  found = await peer[2]._findPeer(peer[3].id); t.ok(found, 'Peer C can find peer D');
+  found = await peer[3]._findPeer(peer[0].id); t.notOk(found, 'Peer D can not find peer A');
+  found = await peer[3]._findPeer(peer[1].id); t.ok(found, 'Peer D can find peer B');
+  found = await peer[3]._findPeer(peer[2].id); t.ok(found, 'Peer D can find peer C');
+
+  // Shutdown peers
+  for(const p of peer) {
+    p.shutdown();
+  }
+});

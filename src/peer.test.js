@@ -67,11 +67,11 @@ test('Path finding', async t => {
   ];
 
   // Setup connections
-  connectPeers(peer[0], peer[1],  1,  2);
-  connectPeers(peer[1], peer[2], 13, 14);
-  connectPeers(peer[2], peer[0],  1,  1);
-  connectPeers(peer[2], peer[3],  2,  1);
-  connectPeers(peer[3], peer[4],  5,  5);
+  connectPeers(peer[0], peer[1],  10,  10);
+  connectPeers(peer[1], peer[2],  20,  20);
+  connectPeers(peer[2], peer[0],  50,  50);
+  connectPeers(peer[2], peer[3], 100, 100);
+  connectPeers(peer[3], peer[4], 200, 200);
 
   // Let the network settle
   await new Promise(r => setTimeout(r, peerOptions.interval * 5));
@@ -80,23 +80,23 @@ test('Path finding', async t => {
   // Some take a longer route with faster connection
   let found;
   found = await peer[0]._findPeer(peer[1].id); t.equal(found.routeLabel, ''            , 'Peer A is directly connected to peer B');
-  found = await peer[0]._findPeer(peer[2].id); t.equal(found.routeLabel, ''            , 'Peer A is directly connected to peer C');
-  found = await peer[0]._findPeer(peer[3].id); t.equal(found.routeLabel, '0011'        , 'Peer A can route to peer D');
-  found = await peer[0]._findPeer(peer[4].id); t.equal(found.routeLabel, '00110010'    , 'Peer A can route to peer E');
+  found = await peer[0]._findPeer(peer[2].id); t.equal(found.routeLabel, '0010'        , 'Peer A can route to peer C');
+  found = await peer[0]._findPeer(peer[3].id); t.equal(found.routeLabel, '00100011'    , 'Peer A can route to peer D');
+  found = await peer[0]._findPeer(peer[4].id); t.equal(found.routeLabel, '001000110010', 'Peer A can route to peer E');
   found = await peer[1]._findPeer(peer[0].id); t.equal(found.routeLabel, ''            , 'Peer B is directly connected to peer A');
-  found = await peer[1]._findPeer(peer[2].id); t.equal(found.routeLabel, '0010'        , 'Peer B can route to peer C');
-  found = await peer[1]._findPeer(peer[3].id); t.equal(found.routeLabel, '00100011'    , 'Peer B can route to peer D');
-  found = await peer[1]._findPeer(peer[4].id); t.equal(found.routeLabel, '001000110010', 'Peer B can route to peer E');
-  found = await peer[2]._findPeer(peer[0].id); t.equal(found.routeLabel, ''            , 'Peer C is directly connected to peer A');
-  found = await peer[2]._findPeer(peer[1].id); t.equal(found.routeLabel, '0001'        , 'Peer C can route to peer B');
+  found = await peer[1]._findPeer(peer[2].id); t.equal(found.routeLabel, ''            , 'Peer B is directly connected to peer C');
+  found = await peer[1]._findPeer(peer[3].id); t.equal(found.routeLabel, '0011'        , 'Peer B can route to peer D');
+  found = await peer[1]._findPeer(peer[4].id); t.equal(found.routeLabel, '00110010'    , 'Peer B can route to peer E');
+  found = await peer[2]._findPeer(peer[0].id); t.equal(found.routeLabel, '0001'        , 'Peer C can route to peer A');
+  found = await peer[2]._findPeer(peer[1].id); t.equal(found.routeLabel, ''            , 'Peer C is directly connected to peer B');
   found = await peer[2]._findPeer(peer[3].id); t.equal(found.routeLabel, ''            , 'Peer C is directly connected to peer D');
   found = await peer[2]._findPeer(peer[4].id); t.equal(found.routeLabel, '0010'        , 'Peer C can route to peer E');
-  found = await peer[3]._findPeer(peer[0].id); t.equal(found.routeLabel, '0010'        , 'Peer D can route to peer A');
-  found = await peer[3]._findPeer(peer[1].id); t.equal(found.routeLabel, '00100001'    , 'Peer D can route to peer B');
+  found = await peer[3]._findPeer(peer[0].id); t.equal(found.routeLabel, '00010001'    , 'Peer D can route to peer A');
+  found = await peer[3]._findPeer(peer[1].id); t.equal(found.routeLabel, '0001'        , 'Peer D can route to peer B');
   found = await peer[3]._findPeer(peer[2].id); t.equal(found.routeLabel, ''            , 'Peer D is directly connected to peer C');
   found = await peer[3]._findPeer(peer[4].id); t.equal(found.routeLabel, ''            , 'Peer D is directly connected to peer E');
-  found = await peer[4]._findPeer(peer[0].id); t.equal(found.routeLabel, '00010010'    , 'Peer E can route to peer A');
-  found = await peer[4]._findPeer(peer[1].id); t.equal(found.routeLabel, '000100100001', 'Peer E can route to peer B');
+  found = await peer[4]._findPeer(peer[0].id); t.equal(found.routeLabel, '000100010001', 'Peer E can route to peer A');
+  found = await peer[4]._findPeer(peer[1].id); t.equal(found.routeLabel, '00010001'    , 'Peer E can route to peer B');
   found = await peer[4]._findPeer(peer[2].id); t.equal(found.routeLabel, '0001'        , 'Peer E can route to peer C');
   found = await peer[4]._findPeer(peer[3].id); t.equal(found.routeLabel, ''            , 'Peer E is directly connected to peer D');
 

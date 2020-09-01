@@ -1,3 +1,4 @@
 module.exports = {
-  Peer: require('./peer'),
+  BitBuffer: require('./bitbuffer'),
+  Peer     : require('./peer'),
 };

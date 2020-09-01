@@ -44,7 +44,7 @@ class Peer extends EventEmitter {
     this.addProcedure({ name: 'connectionDiscovery', handler: ({data}) => {
       return {
         timestamp: data,
-        connections: this.connections.map(connection => {
+        connections: this.connections.filter(c => c).map(connection => {
           let routeLabel = BitBuffer.fromBuffer(Buffer.from([connection.slot]));
           routeLabel.shiftUint(routeLabel.length - this.routeLabelBits);
           return {
@@ -100,7 +100,7 @@ class Peer extends EventEmitter {
     if (!this.procedures[name].length) delete this.procedures[name];
   }
 
-  _callProcedure({ routeLabel, connection, procedure, data, callback = true }) {
+  _callProcedure({ routeLabel, connection, socket, procedure, data, getResponse = true }) {
     return new Promise(async resolve => {
       const name = randomString(32);
 
@@ -111,17 +111,20 @@ class Peer extends EventEmitter {
       };
 
       // Register callback
-      if (callback) {
+      if (getResponse) {
         this.addProcedure({ name, handler });
       }
 
       // Make sure the route label is a buffer
       if ('string' === typeof routeLabel) routeLabel = BitBuffer.from(routeLabel.split('').map(v => parseInt(v)));
-      if (routeLabel instanceof BitBuffer) routeLabel = routeLabel.toBuffer();
+      if (routeLabel instanceof BitBuffer) {
+        while (routeLabel.length < (this.routeLabelSize*8)) routeLabel.push(0);
+        routeLabel = routeLabel.toBuffer();
+      }
 
       // Prepare message
       const message = { fn: procedure, d: data };
-      if (callback) message.cb = name;
+      if (getResponse) message.cb = name;
       const messageBuffer = Buffer.concat([
         routeLabel,              // Route label passthrough
         Buffer.from([0]),        // 0 = no protocol extensions
@@ -129,10 +132,10 @@ class Peer extends EventEmitter {
       ]);
 
       // Send the message over the wire
-      connection.socket.send(messageBuffer);
+      (socket||connection.socket).send(messageBuffer);
 
       // Handle non-callback resolve
-      if (!callback) {
+      if (!getResponse) {
         resolve();
       }
     });
@@ -233,13 +236,13 @@ class Peer extends EventEmitter {
       // Return the queue result
       if (message.d.cb) {
         message.routeLabel.reverse();
-        const data = msgpack.encode({ fn: message.d.cb, d: await queue });
-        const msg  = Buffer.concat([
-          message.routeLabel.toBuffer(), // Return path
-          Buffer.from([0]),              // 0 = no extensions
-          data,                          // msgpack-encoded message
-        ]);
-        connection.socket.send(msg);
+        this._callProcedure({
+          routeLabel  : message.routeLabel,
+          connection  : connection,
+          procedure   : message.d.cb,
+          data        : await queue,
+          getResponse : false,
+        });
       }
     });
 
@@ -305,6 +308,38 @@ class Peer extends EventEmitter {
         return left.rtt - right.rtt;
       });
     }
+  }
+
+  async callProcedure({ peerId = null, procedure = null, getResponse = true, data = null }) {
+    if (peerId instanceof Buffer) peerId = peerId.toString('hex');
+
+    // Handle local call
+    if (null === peerId) {
+      // Create call queue
+      let queue = Promise.resolve({data});
+      for(const fn of (this.procedures[message.d.fn]||[()=>null])) {
+        queue = queue.then(fn);
+      }
+      return queue;
+    }
+
+    // Find how to route towards peer
+    const target = await this._findPeer(peerId);
+    if (!target) throw Error("No path found");
+
+    // Trigger remote call
+    let response = this._callProcedure({
+      ...target,
+      procedure,
+      getResponse,
+      data,
+    });
+
+    // Bail if we're not waiting for the response
+    if (!getResponse) return;
+
+    // Return the response data
+    return (await response).data;
   }
 
   // Stops activity

@@ -1,12 +1,6 @@
 const test       = require('tape');
 const Peer       = require('./peer');
-const Connection = require('../mock/simple-peer');
-
-function connectPeers(peerA, peerB, Adelay = 0, Bdelay = 0) {
-  const conn = Connection(Adelay, Bdelay);
-  peerA.addConnection(conn[0]);
-  peerB.addConnection(conn[1]);
-}
+const Connection = require('hashnet-mock-connection');
 
 test('Peer basics', t => {
   t.plan(3);
@@ -32,9 +26,9 @@ test('Remote ID detection', async t => {
   ];
 
   // Setup connections
-  connectPeers(peer[0], peer[1]);
-  connectPeers(peer[1], peer[2]);
-  connectPeers(peer[2], peer[0]);
+  Connection.linkPeers(peer[0], peer[1]);
+  Connection.linkPeers(peer[1], peer[2]);
+  Connection.linkPeers(peer[2], peer[0]);
 
   // Let the network settle
   await new Promise(r => setTimeout(r, peerOptions.interval * 3));
@@ -67,11 +61,11 @@ test('Path finding', async t => {
   ];
 
   // Setup connections
-  connectPeers(peer[0], peer[1],  10,  10);
-  connectPeers(peer[1], peer[2],  20,  20);
-  connectPeers(peer[2], peer[0],  50,  50);
-  connectPeers(peer[2], peer[3], 100, 100);
-  connectPeers(peer[3], peer[4], 200, 200);
+  Connection.linkPeers(peer[0], peer[1],  10,  10);
+  Connection.linkPeers(peer[1], peer[2],  20,  20);
+  Connection.linkPeers(peer[2], peer[0],  50,  50);
+  Connection.linkPeers(peer[2], peer[3], 100, 100);
+  Connection.linkPeers(peer[3], peer[4], 200, 200);
 
   // Let the network settle
   await new Promise(r => setTimeout(r, peerOptions.interval * 5));
@@ -119,9 +113,9 @@ test('Path finding timeout', async t => {
   ];
 
   // Connect peers over slow connections
-  connectPeers(peer[0], peer[1], 200, 200);
-  connectPeers(peer[1], peer[2], 200, 200);
-  connectPeers(peer[2], peer[3], 200, 200);
+  Connection.linkPeers(peer[0], peer[1], 200, 200);
+  Connection.linkPeers(peer[1], peer[2], 200, 200);
+  Connection.linkPeers(peer[2], peer[3], 200, 200);
 
   // Let the network settle
   await new Promise(r => setTimeout(r, peerOptions.interval * 3));

@@ -24,5 +24,9 @@
   },
   "funding": {
     "url": "https://github.com/sponsors/finwo"
-  }
+  },
+  "keywords": [
+    "router",
+    "rpc"
+  ]
 }

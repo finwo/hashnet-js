@@ -41,7 +41,7 @@ class Peer extends EventEmitter {
     this.procedures  = {};
 
     // Handle requests for connection listing (used in path finding)
-    this.addProcedure({ name: 'connectionDiscovery', handler: ({data}) => {
+    this.addProcedure({ name: 'connectionDiscovery', handler: (data) => {
       return {
         timestamp: data,
         connections: this.connections.filter(c => c).map(connection => {
@@ -54,6 +54,11 @@ class Peer extends EventEmitter {
           };
         }),
       };
+    }});
+
+    // Allow procedure detection
+    this.addProcedure({ name: 'procedureDiscovery', handler: () => {
+      return Object.keys(this.procedures);
     }});
 
     // Setup timer tick
@@ -72,31 +77,28 @@ class Peer extends EventEmitter {
           data       : Date.now(),
         });
         if (!response) continue;
-        connection.rtt = Date.now() - response.data.timestamp;
-        connection.id  = response.data.id;
+        connection.rtt = Date.now() - response.timestamp;
+        connection.id  = response.id;
       }
     });
 
     // RTT ping handler
-    this.addProcedure({ name: 'ping', handler: ({data}) => {
+    this.addProcedure({ name: 'ping', handler: data => {
       return {
         timestamp: data,
         id       : this.id,
       };
     }});
-
-    // RTT response handler
-    this.addProcedure({ name: 'pong', handler: ({data, connection}) => {
-      connection.id  = data.id;
-      connection.rtt = Date.now() - data.timestamp;
-    }});
   }
 
   addProcedure({ name, handler }) {
+    if ('string' !== typeof name) return;
+    if ('function' !== typeof handler) return;
     (this.procedures[name] = this.procedures[name] || []).push(handler);
   }
 
   removeProcedure({ name, handler }) {
+    if ('string' !== typeof name) return;
     this.procedures[name] = (this.procedures[name] || []).filter(fn => fn !== handler);
     if (!this.procedures[name].length) delete this.procedures[name];
   }
@@ -105,6 +107,10 @@ class Peer extends EventEmitter {
     return new Promise(async resolve => {
       const name     = randomString(32);
       let   finished = false;
+
+      // Handle fallbacks from connection
+      routeLabel = routeLabel || connection.routeLabel;
+      socket     = socket     || connection.socket;
 
       // Callback handler
       const handler = data => {
@@ -140,7 +146,7 @@ class Peer extends EventEmitter {
       ]);
 
       // Send the message over the wire
-      (socket||connection.socket).send(messageBuffer);
+      socket.send(messageBuffer);
 
       // Handle non-callback resolve
       if (!getResponse) {
@@ -153,20 +159,19 @@ class Peer extends EventEmitter {
   addConnection(socket) {
     const connection = { socket };
 
-    // Prevent too many connections
-    if (this.connections.length >= this.maxConnections) {
-      return 'too-many-connections';
-    }
-
     // Re-use old slot if available
     let reusedSlot = false;
     this.connections.forEach((conn, index) => {
       if (reusedSlot) return;
-      if (!conn) {
-        this.connections[index] = connection;
-        reusedSlot              = true;
-      }
+      if (conn) return;
+      this.connections[index] = connection;
+      reusedSlot              = true;
     });
+
+    // Prevent too many connections
+    if ((!reusedSlot) && (this.connections.length >= this.maxConnections)) {
+      return 'too-many-connections';
+    }
 
     // Create new slot if not re-used
     if (!reusedSlot) {
@@ -235,10 +240,10 @@ class Peer extends EventEmitter {
       if (!message.d.fn) return;
       message.data = message.d.d;
 
-      // Create call queue
-      let queue = Promise.resolve(message);
+      // Run procedure
+      let returnData = message.data;
       for(const fn of (this.procedures[message.d.fn]||[()=>null])) {
-        queue = queue.then(fn);
+        returnData = await fn(returnData, message);
       }
 
       // Return the queue result
@@ -248,7 +253,7 @@ class Peer extends EventEmitter {
           routeLabel  : message.routeLabel,
           connection  : connection,
           procedure   : message.d.cb,
-          data        : await queue,
+          data        : returnData,
           getResponse : false,
         });
       }
@@ -265,6 +270,7 @@ class Peer extends EventEmitter {
   // Find's a path to a certain peer
   async _findPeer(peerId) {
     if (peerId instanceof Buffer) peerId = peerId.toString('hex');
+    if (!peerId) return;
 
     const closedset = {};
     const openset   = this.connections.slice().map(peer => Object.assign({routeLabel:''},peer));
@@ -307,8 +313,8 @@ class Peer extends EventEmitter {
       }
 
       // Add found peers to the set
-      const rtt = Date.now() - response.data.timestamp;
-      for(const conn of response.data.connections) {
+      const rtt = Date.now() - response.timestamp;
+      for(const conn of response.connections) {
         openset.push(Object.assign({}, current, {
           id        : conn.id,
           rtt       : rtt + conn.rtt,
@@ -323,15 +329,15 @@ class Peer extends EventEmitter {
 
   async callProcedure({ peerId = null, procedure = null, getResponse = true, data = null }) {
     if (peerId instanceof Buffer) peerId = peerId.toString('hex');
+    if ('string' !== typeof procedure) return;
 
     // Handle local call
-    if (null === peerId) {
-      // Create call queue
-      let queue = Promise.resolve({data});
-      for(const fn of (this.procedures[message.d.fn]||[()=>null])) {
-        queue = queue.then(fn);
+    if ((peerId === null) || (peerId === this.id)) {
+      let returnData = data;
+      for(const fn of (this.procedures[procedure]||[()=>null])) {
+        returnData = await fn(returnData, {data});
       }
-      return queue;
+      return returnData;
     }
 
     // Find how to route towards peer

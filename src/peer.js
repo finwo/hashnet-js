@@ -373,6 +373,9 @@ class Peer extends EventEmitter {
       connection.socket.destroy();
     }
 
+    // Notify extensions
+    this.emit('shutdown');
+
   }
 
 }

@@ -41,7 +41,7 @@ class Peer extends EventEmitter {
     this.procedures  = {};
 
     // Handle requests for connection listing (used in path finding)
-    this.addProcedure({ name: 'connectionDiscovery', handler: (data) => {
+    this.addProcedure({ name: 'discovery.connection', handler: (data) => {
       return {
         timestamp: data,
         connections: this.connections.filter(c => c).map(connection => {
@@ -57,7 +57,7 @@ class Peer extends EventEmitter {
     }});
 
     // Allow procedure detection
-    this.addProcedure({ name: 'procedureDiscovery', handler: () => {
+    this.addProcedure({ name: 'discovery.procedure', handler: () => {
       return Object.keys(this.procedures);
     }});
 
@@ -305,7 +305,7 @@ class Peer extends EventEmitter {
       const response = await this._callProcedure({
         routeLabel,
         connection: current,
-        procedure : 'connectionDiscovery',
+        procedure : 'discovery.connection',
         data      : Date.now(),
       });
       if (!response) {

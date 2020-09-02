@@ -1,5 +1,5 @@
-const test          = require('tape');
-const { BitBuffer } = require('hashnet');
+const test      = require('tape');
+const BitBuffer = require('./bitbuffer');
 
 test('BitBuffer basics', t => {
   t.plan(3);

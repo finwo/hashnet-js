@@ -18,11 +18,11 @@
   },
   "homepage": "https://github.com/finwo/hashnet-js#readme",
   "devDependencies": {
-    "tape": "^5.0.1"
+    "tape": "^5.0.1",
+    "hashnet-mock-connection": "^0.1.1"
   },
   "dependencies": {
-    "@ygoe/msgpack": "^1.0.2",
-    "hashnet-mock-connection": "^0.1.1"
+    "@ygoe/msgpack": "^1.0.2"
   },
   "funding": {
     "url": "https://github.com/sponsors/finwo"

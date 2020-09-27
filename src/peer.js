@@ -15,26 +15,21 @@ class Peer extends EventEmitter {
   constructor(options) {
     super();
 
-    // Setup configurable variables
+    // Allow configuration
     Object.assign(this, {
-      id             : null,
-      interval       : 5000,
-      timeout        : 2000,
-      maxConnections : 15,
-      routeLabelSize : 32,
+      id            : null,
+      interval      : 5000,
+      timeout       : 2000,
+      maxConnections: 15,
+      routeLabelSize: 32,
     }, options);
 
-    // No ID = generate one
-    if (!this.id) {
-      this.id = Buffer.from(randomString(64), 'hex');
-    }
+    // Ensure ID
+    this.id = this.id || Buffer.from(randomString(64), 'hex');
 
     // Calculate route label size (in bits)
-    this.routeLabelBits = (() => {
-      let size = 1;
-      while(this.maxConnections >= (2**size)) size++;
-      return size;
-    })();
+    this.routeLabelBits = 1;
+    while(this.maxConnections >= (2**this.routeLabelBits)) this.routeLabelBits++;
 
     // Where to track connections & procedures
     this.connections = [];
@@ -56,10 +51,10 @@ class Peer extends EventEmitter {
       };
     }});
 
-    // Allow procedure detection
-    this.addProcedure({ name: 'discovery.procedure', handler: () => {
-      return Object.keys(this.procedures);
-    }});
+    // // Allow procedure detection
+    // this.addProcedure({ name: 'discovery.procedure', handler: () => {
+    //   return Object.keys(this.procedures);
+    // }});
 
     // Setup timer tick
     this.timer = setInterval(() => {
@@ -69,7 +64,6 @@ class Peer extends EventEmitter {
     // RTT ping init
     this.on('tick', async () => {
       for(const connection of this.connections) {
-        if (!connection) continue;
         const response = await this._callProcedure({
           routeLabel : Buffer.alloc(this.routeLabelSize),
           connection : connection,
@@ -83,13 +77,12 @@ class Peer extends EventEmitter {
     });
 
     // RTT ping handler
-    this.addProcedure({ name: 'ping', handler: data => {
-      return {
-        timestamp: data,
-        id       : this.id,
-      };
-    }});
+    this.addProcedure({ name: 'ping', handler: data => ({
+      timestamp: data,
+      id       : this.id,
+    })});
   }
+
 
   addProcedure({ name, handler }) {
     if ('string' !== typeof name) return;
@@ -105,12 +98,13 @@ class Peer extends EventEmitter {
 
   _callProcedure({ routeLabel, connection, socket, procedure, data, getResponse = true }) {
     return new Promise(async resolve => {
+
       const name     = randomString(32);
       let   finished = false;
 
       // Handle fallbacks from connection
-      routeLabel = routeLabel || connection.routeLabel;
-      socket     = socket     || connection.socket;
+      routeLabel = routeLabel || (connection && connection.routeLabel) || routeLabel;
+      socket     = socket     || (connection && connection.socket    ) || socket;
 
       // Callback handler
       const handler = data => {
@@ -142,7 +136,7 @@ class Peer extends EventEmitter {
       const messageBuffer = Buffer.concat([
         routeLabel,              // Route label passthrough
         Buffer.from([0]),        // 0 = no protocol extensions
-        msgpack.encode(message), // msgpack-encoded message
+        msgpack.encode(message), // wire-encoded message
       ]);
 
       // Send the message over the wire
@@ -157,29 +151,20 @@ class Peer extends EventEmitter {
 
   // Handle adding a connection
   addConnection(socket) {
-    const connection = { socket };
+    const connection = { slot: 1, socket };
 
-    // Re-use old slot if available
-    let reusedSlot = false;
-    this.connections.forEach((conn, index) => {
-      if (reusedSlot) return;
-      if (conn) return;
-      this.connections[index] = connection;
-      reusedSlot              = true;
-    });
+    // Find slot to place this in
+    while(this.connections.find(conn => conn.slot == connection.slot)) {
+      connection.slot++;
+    }
 
     // Prevent too many connections
-    if ((!reusedSlot) && (this.connections.length >= this.maxConnections)) {
+    if (connection.slot > this.maxConnections) {
       return 'too-many-connections';
     }
 
-    // Create new slot if not re-used
-    if (!reusedSlot) {
-      this.connections.push(connection);
-    }
-
-    // Assign slot
-    connection.slot = this.connections.indexOf(connection) + 1;
+    // Register new connection
+    this.connections.push(connection);
 
     // Handle incoming data
     connection.socket.on('data', async buf => {
@@ -212,27 +197,11 @@ class Peer extends EventEmitter {
       // Detect protocol extensions
       message.extensionSize = message.data.slice(0,1)[0];
       message.data          = message.data.slice(1);
+      message.extension     = message.data.slice(0,message.extensionSize);
 
       /* * * * * * * * * * * * * * * * * *\
        * No extensions are supported yet *
       \* * * * * * * * * * * * * * * * * */
-
-//       // Detect encrypted messages
-//       message.cryptoNameSize = message.data.slice(0,1)[0];
-//       message.cryptoName     = message.data.slice(1,1 + message.cryptoNameSize).toString();
-//       message.data           = message.data.slice(1 + message.cryptoNameSize);
-
-//       // Handle encrypted messages
-//       if (message.cryptoNameSize) {
-//         if (!cryptos[message.cryptoName]) return;
-//         message.senderIdSize = message.data.slice(0,1)[0];
-//         message.data         = message.data.slice(1);
-//         message.senderId     = message.data.slice(0,message.senderIdSize);
-//         message.data         = message.data.slice(message.senderIdSize);
-//         message.sharedSecret = await supercop.keyExchange(message.senderId, this.kp.secretKey);
-//         const cipher         = cryptos[message.cryptoName](message.sharedSecret);
-//         message.data         = Buffer.concat([cipher.decrypt(message.data)]);
-//       }
 
       // Decode message
       message.d = msgpack.decode(message.data);
@@ -259,11 +228,11 @@ class Peer extends EventEmitter {
       }
     });
 
-    // Handle lost connections
+    // Un-register connection on close
     connection.socket.on('close', () => {
       const index = this.connections.indexOf(connection);
       if (!~index) return;
-      this.connections[index] = null;
+      this.connections.splice(index, 1);
     });
   }
 
@@ -272,6 +241,7 @@ class Peer extends EventEmitter {
     if (peerId instanceof Buffer) peerId = peerId.toString('hex');
     if (!peerId) return;
 
+    // Tracking all connections
     const closedset = {};
     const openset   = this.connections.slice().map(peer => Object.assign({routeLabel:''},peer));
     openset.sort((left, right) => {
@@ -352,11 +322,7 @@ class Peer extends EventEmitter {
       data,
     });
 
-    // Bail if we're not waiting for the response
-    if (!getResponse) return;
-
-    // Return the response data
-    return (await response).data;
+    return getResponse ? response : null;
   }
 
   // Stops activity
@@ -375,7 +341,6 @@ class Peer extends EventEmitter {
 
     // Notify extensions
     this.emit('shutdown');
-
   }
 
 }

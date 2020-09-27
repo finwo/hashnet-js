@@ -3,14 +3,17 @@ const Peer       = require('./peer');
 const Connection = require('hashnet-mock-connection');
 
 test('Peer basics', t => {
-  t.plan(3);
+  t.plan(6);
 
   t.equal('function', typeof Peer, 'Peer is a function');
 
   const peer = new Peer();
   t.equal('object', typeof peer, 'Peer can be used as constructor');
 
-  t.equal('function', typeof peer.shutdown, 'Peer has shutdown function');
+  t.equal('function', typeof peer.shutdown       , 'Peer has shutdown function');
+  t.equal('function', typeof peer.addProcedure   , 'Peer has addProcedure function');
+  t.equal('function', typeof peer.removeProcedure, 'Peer has removeProcedure function');
+  t.equal('function', typeof peer.callProcedure  , 'Peer has callProcedure function');
   peer.shutdown();
 });
 
@@ -134,6 +137,43 @@ test('Path finding timeout', async t => {
   found = await peer[3]._findPeer(peer[0].id); t.notOk(found, 'Peer D can not find peer A');
   found = await peer[3]._findPeer(peer[1].id); t.ok(found, 'Peer D can find peer B');
   found = await peer[3]._findPeer(peer[2].id); t.ok(found, 'Peer D can find peer C');
+
+  // Shutdown peers
+  for(const p of peer) {
+    p.shutdown();
+  }
+});
+
+test('Procedure calling', async t => {
+  t.plan(3);
+  const peerOptions = { interval: 1000 };
+
+  // Setup peers
+  const peer = [
+    new Peer(peerOptions),
+    new Peer(peerOptions),
+    new Peer(peerOptions),
+  ];
+
+  // Connect peers over slow connections
+  Connection.linkPeers(peer[0], peer[1], 10, 10);
+  Connection.linkPeers(peer[1], peer[2], 10, 10);
+
+  // Let the network settle
+  await new Promise(r => setTimeout(r, peerOptions.interval * 3));
+
+  // Add procedure we'll call
+  let received = null;
+  peer[0].addProcedure({
+    name   : 'test',
+    handler: msg => `Hello, ${msg}!`
+  });
+
+  // Test our procedure
+  let response;
+  t.equal(await peer[0].callProcedure({ peerId: peer[0].id, procedure: 'test', data: 'World'  }), 'Hello, World!' , 'Local call works');
+  t.equal(await peer[1].callProcedure({ peerId: peer[0].id, procedure: 'test', data: 'Remote' }), 'Hello, Remote!', 'Remote call works');
+  t.equal(await peer[2].callProcedure({ peerId: peer[0].id, procedure: 'test', data: 'Hop'    }), 'Hello, Hop!'   , 'Hopped call works');
 
   // Shutdown peers
   for(const p of peer) {

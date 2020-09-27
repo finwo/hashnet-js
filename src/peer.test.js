@@ -3,17 +3,19 @@ const Peer       = require('./peer');
 const Connection = require('hashnet-mock-connection');
 
 test('Peer basics', t => {
-  t.plan(6);
+  t.plan(8);
 
   t.equal('function', typeof Peer, 'Peer is a function');
 
   const peer = new Peer();
   t.equal('object', typeof peer, 'Peer can be used as constructor');
 
-  t.equal('function', typeof peer.shutdown       , 'Peer has shutdown function');
-  t.equal('function', typeof peer.addProcedure   , 'Peer has addProcedure function');
-  t.equal('function', typeof peer.removeProcedure, 'Peer has removeProcedure function');
-  t.equal('function', typeof peer.callProcedure  , 'Peer has callProcedure function');
+  t.equal('function', typeof peer.shutdown       , 'Peer has shutdown method');
+  t.equal('function', typeof peer.addProcedure   , 'Peer has addProcedure method');
+  t.equal('function', typeof peer.removeProcedure, 'Peer has removeProcedure method');
+  t.equal('function', typeof peer.callProcedure  , 'Peer has callProcedure method');
+  t.equal('function', typeof peer.addHook        , 'Peer has addHook method');
+  t.equal('function', typeof peer.removeHook     , 'Peer has removeHook method');
   peer.shutdown();
 });
 

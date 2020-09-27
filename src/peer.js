@@ -1,6 +1,7 @@
 const EventEmitter = require('events').EventEmitter;
 const BitBuffer    = require('./bitbuffer');
 const msgpack      = require('@ygoe/msgpack');
+const hook         = require('./hook');
 
 function randomCharacter(alphabet = '0123456789abcdef') {
   return alphabet.substr(Math.floor(Math.random()*alphabet.length), 1);
@@ -34,6 +35,7 @@ class Peer extends EventEmitter {
     // Where to track connections & procedures
     this.connections = [];
     this.procedures  = {};
+    this.hooks       = {};
 
     // Handle requests for connection listing (used in path finding)
     this.addProcedure({ name: 'discovery.connection', handler: (data) => {
@@ -84,16 +86,28 @@ class Peer extends EventEmitter {
   }
 
 
-  addProcedure({ name, handler }) {
+  addProcedure({name, handler}) {
     if ('string' !== typeof name) return;
     if ('function' !== typeof handler) return;
     (this.procedures[name] = this.procedures[name] || []).push(handler);
   }
 
-  removeProcedure({ name, handler }) {
+  removeProcedure({name, handler}) {
     if ('string' !== typeof name) return;
     this.procedures[name] = (this.procedures[name] || []).filter(fn => fn !== handler);
     if (!this.procedures[name].length) delete this.procedures[name];
+  }
+
+  addHook({name, handler}) {
+    if ('string' !== typeof name) return;
+    if ('function' !== typeof handler) return;
+    (this.hooks[name] = this.hooks[name] || []).push(handler);
+  }
+
+  removeHook({name, handler}) {
+    if ('string' !== typeof name) return;
+    this.hooks[name] = (this.hooks[name] || []).filter(fn => fn !== handler);
+    if (!this.hooks[name].length) delete this.hooks[name];
   }
 
   _callProcedure({ routeLabel, connection, socket, procedure, data, getResponse = true }) {
@@ -150,7 +164,8 @@ class Peer extends EventEmitter {
   }
 
   // Handle adding a connection
-  addConnection(socket) {
+  async addConnection(socket) {
+    socket = await hook(this.hooks['add-connection'] || [], socket);
     const connection = { slot: 1, socket };
 
     // Find slot to place this in

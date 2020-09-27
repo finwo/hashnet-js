@@ -320,7 +320,7 @@ class Peer extends EventEmitter {
     await hook(this.hooks['call-procedure'], { peerId });
 
     // Handle local call
-    if ((peerId === null) || (peerId === this.id)) {
+    if ((peerId === null) || (peerId === this.id.toString('hex'))) {
       let returnData = data;
       for(const fn of (this.procedures[procedure]||[()=>null])) {
         returnData = await fn(returnData, {data});

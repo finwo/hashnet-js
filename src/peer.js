@@ -145,7 +145,8 @@ class Peer extends EventEmitter {
       }
 
       // Prepare message
-      const message = { fn: procedure, d: data };
+      const message = { fn: procedure };
+      if ('undefined' !== typeof data) message.d = data;
       if (getResponse) message.cb = name;
       const messageBuffer = Buffer.concat([
         routeLabel,              // Route label passthrough
@@ -164,9 +165,14 @@ class Peer extends EventEmitter {
   }
 
   // Handle adding a connection
-  async addConnection(socket) {
+  async addConnection(socket, id) {
     socket = await hook(this.hooks['add-connection'] || [], socket);
     const connection = { slot: 1, socket };
+
+    // Allow passing known id as hex string
+    if ('string' === typeof id) {
+      connection.id = Buffer.from(id, 'hex');
+    }
 
     // Find slot to place this in
     while(this.connections.find(conn => conn.slot == connection.slot)) {

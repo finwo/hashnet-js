@@ -316,6 +316,9 @@ class Peer extends EventEmitter {
     if (peerId instanceof Buffer) peerId = peerId.toString('hex');
     if ('string' !== typeof procedure) return;
 
+    // Allow brokers to handle connect directly
+    await hook(this.hooks['call-procedure'], { peerId });
+
     // Handle local call
     if ((peerId === null) || (peerId === this.id)) {
       let returnData = data;

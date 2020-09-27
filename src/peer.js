@@ -53,10 +53,10 @@ class Peer extends EventEmitter {
       };
     }});
 
-    // // Allow procedure detection
-    // this.addProcedure({ name: 'discovery.procedure', handler: () => {
-    //   return Object.keys(this.procedures);
-    // }});
+    // Allow procedure detection
+    this.addProcedure({ name: 'discovery.procedure', handler: () => {
+      return Object.keys(this.procedures);
+    }});
 
     // Setup timer tick
     this.timer = setInterval(() => {

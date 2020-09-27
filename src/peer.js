@@ -278,8 +278,7 @@ class Peer extends EventEmitter {
       // Handle found peer
       if (peerId == currentId) {
         // Allow brokers to connect directly
-        await hook(this.hooks['find-peer'], current);
-        return current;
+        return await hook(this.hooks['find-peer'], current);
       }
 
       // Already known = skip

@@ -359,8 +359,8 @@ class Peer extends EventEmitter {
     this.timer = null;
 
     // Close all connections
-    for(const connection of this.connections) {
-      if (!connection) continue;
+    while(this.connections.length) {
+      const connection = this.connections.shift();
       connection.socket.destroy();
     }
 

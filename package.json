@@ -22,7 +22,7 @@
     "hashnet-mock-connection": "^0.1.1"
   },
   "dependencies": {
-    "@ygoe/msgpack": "^1.0.2"
+    "@ygoe/msgpack": "^1.0.3"
   },
   "funding": {
     "url": "https://github.com/sponsors/finwo"
